@@ -21,7 +21,7 @@
 	  - If the Minor or Patch is omitted, the latest available is used.
 	    (e.g. pkg:7 will select the latest version with Major version 7)
 	When this parameter is omitted, packges are read from a file named '.pwr' in the current working directory
-	  - The file must contain a line-separated list of packages
+	  - The file must have the form { "packages": ["pkg:7", ... ] }
 .PARAMETER Fetch
 	Forces the repository of packges to be synchronized from the upstream source.
 	Otherwise, the cached repository is used and updated if older than one day.
@@ -289,14 +289,7 @@ function Invoke-PackageShell($pkg) {
 function Assert-NonEmptyPackages {
 	if ($Packages.Count -eq 0) {
 		if (Test-Path '.pwr') {
-			$ps = @()
-			foreach($line in [IO.File]::ReadLines('.pwr')) {
-				$p = $line.Trim()
-				if (-not [String]::IsNullOrWhiteSpace($p)) {
-					$ps += ,$p
-				}
-			}
-			$script:Packages = $ps
+			$script:Packages = (Get-Content '.pwr' | ConvertFrom-Json).Packages
 		}
 	}
 	if ($Packages.Count -eq 0) {
