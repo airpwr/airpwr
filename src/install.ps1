@@ -8,4 +8,7 @@ $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (-not $UserPath.Contains($PwrCmd)) {
 	[Environment]::SetEnvironmentVariable('Path', "$UserPath;$PwrCmd", 'User')
 }
+if (-not ${env:Path}.Contains($PwrCmd)) {
+	$env:Path = "$env:Path;$PwrCmd"
+}
 pwr version
