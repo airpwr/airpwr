@@ -13,18 +13,28 @@
 	version, v		Displays this verion of pwr
 	remove, rm		Removes package data from the local machine
 	update			Updates the pwr command to the latest version
+.PARAMETER Fetch
+	Forces the repository of packges to be synchronized from the upstream source
+	Otherwise, the cached repository is used and updated if older than one day
 .PARAMETER Packages
 	A list of packages and their versions to be used in the fetch or shell command
 	Must be in the form name[:version]
-	  - When the version is omitted, the latest available is used.
+	  - When the version is omitted, the latest available is used
 	  - Version must be in the form [Major[.Minor[.Patch]]] or 'latest'
-	  - If the Minor or Patch is omitted, the latest available is used.
+	  - If the Minor or Patch is omitted, the latest available is used
 	    (e.g. pkg:7 will select the latest version with Major version 7)
 	When this parameter is omitted, packges are read from a file named '.pwr' in the current working directory
 	  - The file must have the form { "packages": ["pkg:7", ... ] }
-.PARAMETER Fetch
-	Forces the repository of packges to be synchronized from the upstream source.
-	Otherwise, the cached repository is used and updated if older than one day.
+.PARAMETER Repositories
+	A list of OCI compliant container repositories
+	When this parameter is omitted and a file named '.pwr' exists the current working directory, repositories are read from that file
+	  - The file must have the form { "repositories": ["example.com/v2/some/repo"] }
+	  - The registry (e.g. 'example.com/v2/') may be omitted when the registry is DockerHub
+	When this parameter is omitted and no file is present, a default repository is use
+
+	In some cases, you will need to add authentication for custom repositories
+	  - A file located at '%appdata%\pwr\auths.pwr' is read
+	  - The file must have the form { "<repo url>": { "basic": "<base64>" }, ... }
 #>
 param (
 	[Parameter(Position=0)]
@@ -32,6 +42,7 @@ param (
 	[Parameter(Position=1)]
 	[ValidatePattern('^[a-zA-Z0-9_-]+(:([0-9]+\.){0,2}[0-9]*)?$')]
 	[string[]]$Packages,
+	[string[]]$Repositories,
 	[switch]$Fetch
 )
 
@@ -81,7 +92,12 @@ Class SemanticVersion : System.IComparable {
 
 }
 
-function AsHashTable {
+function Get-StringHash($s) {
+	$stream = [IO.MemoryStream]::new([byte[]][char[]]$s)
+	return (Get-FileHash -InputStream $stream).Hash.Substring(0, 12)
+}
+
+function ConvertTo-HashTable {
 	param (
 		[Parameter(ValueFromPipeline)][PSCustomObject]$Object
 	)
@@ -91,74 +107,58 @@ function AsHashTable {
 		if ($V -is [array]) {
 			$V = [System.Collections.ArrayList]$V
 		} elseif ($V -is [PSCustomObject]) {
-			$V = ($V | AsHashTable)
+			$V = ($V | ConvertTo-HashTable)
 		}
 		$Table.($_.Name) = $V
 	}
 	return $Table
 }
 
-function Invoke-PackageVariables($PkgPath) {
-	$vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | AsHashTable
-	# Vars
-	foreach ($k in $vars.var.keys) {
-		Set-Variable -Name $k -Value $vars.var.$k
-	}
-	# Env
-	foreach ($k in $vars.env.keys) {
-		Set-Item "env:$k" $vars.env.$k
-	}
-	# Run
-	foreach ($line in $vars.run) {
-		Invoke-Expression $line
-	}
-}
-
-function Get-DockerToken($scope) {
-	$resp = Invoke-WebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:${scope}:pull"
+function Get-DockerToken($repo) {
+	$resp = Invoke-WebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($repo.scope):pull"
 	return ($resp.content | ConvertFrom-Json).token
 }
 
-function Get-DockerManifest($token, $scope, $tag) {
-	$headers = @{
-		"Authorization" = "Bearer $token"
-		"Accept" = "application/vnd.docker.distribution.manifest.v2+json"
+function Get-ImageManifest($pkg) {
+	$headers = @{"Accept" = "application/vnd.docker.distribution.manifest.v2+json"}
+	if ($pkg.repo.Headers.Authorization) {
+		$headers.Authorization = $pkg.repo.Headers.Authorization
+	} elseif ($pkg.repo.IsDocker) {
+		$headers.Authorization = "Bearer $(Get-DockerToken $pkg.repo)"
 	}
-	$resp = Invoke-WebRequest "https://index.docker.io/v2/$scope/manifests/$tag" -Headers $headers -UseBasicParsing
+	$resp = Invoke-WebRequest "$($pkg.repo.uri)/manifests/$($pkg.tag)" -Headers $headers -UseBasicParsing
 	return [string]$resp | ConvertFrom-Json
 }
 
-function Invoke-PullDockerLayer($out, $token, $scope, $digest) {
+function Invoke-PullImageLayer($out, $repo, $digest) {
 	$tmp = "$env:temp/$($digest.Replace(':', '_')).tgz"
-	$headers = @{
-		"Authorization" = "Bearer $token"
+	$headers = @{}
+	if ($repo.Headers.Authorization) {
+		$headers.Authorization = $repo.Headers.Authorization
+	} elseif ($repo.IsDocker) {
+		$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
 	}
-	Invoke-WebRequest "https://index.docker.io/v2/$scope/blobs/$digest" -OutFile $tmp -Headers $headers
+	Invoke-WebRequest "$($repo.uri)/blobs/$digest" -OutFile $tmp -Headers $headers
 	tar -xzf $tmp -C $out --exclude 'Hives/*' --strip-components 1
 	Remove-Item $tmp
 }
 
-function Get-DockerTags($scope) {
-	$token = Get-DockerToken $scope
-	$headers = @{
-		"Authorization" = "Bearer $token"
+function Get-RepoTags($repo) {
+	$headers = @{}
+	if ($repo.Headers.Authorization) {
+		$headers.Authorization = $repo.Headers.Authorization
+	} elseif ($repo.IsDocker) {
+		$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
 	}
-	$resp = Invoke-WebRequest "https://index.docker.io/v2/$scope/tags/list" -Headers $headers -UseBasicParsing
+	$resp = Invoke-WebRequest "$($repo.uri)/tags/list" -Headers $headers -UseBasicParsing
 	return [string]$resp | ConvertFrom-Json
 }
 
-function Set-RegistryKey($path, $name, $value) {
-	if (!(Test-Path $path)) {
-		New-Item -Path $path -Force | Out-Null
-	}
-	New-ItemProperty -Path $path -Name $name -Value $value -Force | Out-Null
-}
-
 function Resolve-PwrPackge($pkg) {
-	return "$PwrPath\pkg\$pkg"
+	return "$PwrPath\pkg\$($pkg.tag)"
 }
 
-function Split-Package($pkg) {
+function Split-PwrPackage($pkg) {
 	$split = $pkg.Split(':')
 	switch ($split.count) {
 		2 {
@@ -176,9 +176,9 @@ function Split-Package($pkg) {
 	}
 }
 
-function Get-LatestVersion($name, $matcher) {
+function Get-LatestVersion($pkgs, $matcher) {
 	$latest = $null
-	foreach ($v in $Pkgs.$name) {
+	foreach ($v in $pkgs) {
 		$ver = [SemanticVersion]::new($v, '([0-9]+)\.([0-9]+)\.([0-9]+)')
 		if (($null -eq $latest) -or ($ver.CompareTo($latest) -lt 0)) {
 			if ($matcher -and ($v -notmatch $matcher)) {
@@ -193,85 +193,95 @@ function Get-LatestVersion($name, $matcher) {
 	return $latest.ToString()
 }
 
-function Assert-Package($pkg) {
-	$p = Split-Package $pkg
+function Assert-PwrPackage($pkg) {
+	$p = Split-PwrPackage $pkg
 	$name = $p.name
 	$version = $p.version
-	if (-not $pkgs.$name) {
-		Write-Error "pwr: no package named '${name}'"
-	} elseif ($version -eq 'latest') {
-		return "$name-$(Get-LatestVersion $name)"
-	} elseif ($version -match '^([0-9]+\.){2}[0-9]+$' -and ($version -in $Pkgs.$name)) {
-		return "$name-$version"
-	} elseif ($version -match '^[0-9]+(\.[0-9]+)?$') {
-		return "$name-$(Get-LatestVersion $name $version)"
-	} else {
-		Write-Error "pwr: no package for ${name}:$version"
-	}
-}
-
-function Get-Packages {
-	$pkgFile = "$PwrPath\pkgs.pwr"
-	$exists = Test-Path $pkgFile
-	if ($exists) {
-		$LastWrite = [DateTime]::Parse((Get-Item $pkgFile).LastWriteTime)
-		$OutOfDate = [DateTime]::Compare((Get-Date), $LastWrite + (New-TimeSpan -Days 1)) -gt 0
-	}
-	if (!$exists -or $OutOfDate -or $Fetch) {
-		try {
-			Write-Output 'pwr: fetching package list'
-			$tagList = Get-DockerTags $PwrScope
-			$pkgs = @{}
-			$names = @{}
-			foreach ($tag in $tagList.tags) {
-				$tag -match '([^-]+)-(.+)' | Out-Null
-				if ($Matches) {
-					$pkg = $Matches[1]
-					$ver = $Matches[2]
-					$names.$pkg = $null
-					$pkgs.$pkg = @($pkgs.$pkg) + @([SemanticVersion]::new($ver)) | Sort-Object
-				}
-			}
-			foreach ($name in $names.keys) {
-				$pkgs.$name = $pkgs.$name | ForEach-Object { $_.ToString() }
-			}
-			$pkgs | ConvertTo-Json -Depth 50 -Compress | Out-File $pkgFile -Encoding 'utf8' -Force
-		} catch {
-			Write-Host -ForegroundColor Red 'pwr: failed to fetch package list'
-			Write-Debug "pwr: encountered error while fetching package list `r`n    > $($Error[0])"
+	foreach ($Repo in $PwrRepositories) {
+		if (-not $Repo.Packages.$name) {
+			continue
+		} elseif ($version -eq 'latest') {
+			$latest = Get-LatestVersion $Repo.Packages.$name
+			$p.Tag = "$name-$latest"
+			$p.Version = $latest
+		} elseif ($version -match '^([0-9]+\.){2}[0-9]+$' -and ($version -in $Repo.Packages.$name)) {
+			$p.Tag = "$name-$version"
+		} elseif ($version -match '^[0-9]+(\.[0-9]+)?$') {
+			$latest = Get-LatestVersion $Repo.Packages.$name $version
+			$p.Tag = "$name-$latest"
+			$p.Version = $latest
+		}
+		if ($p.Tag) {
+			$p.Repo = $Repo
+			$p.Ref = "$($p.name):$($p.version)"
+			return $p
 		}
 	}
-	return Get-Content $pkgFile | ConvertFrom-Json
+	Write-Error "pwr: no package for ${name}:$version"
 }
 
-function Test-Package($pkg) {
+function Get-PwrPackages {
+	foreach ($Repo in $PwrRepositories) {
+		$Cache = "$PwrPath\cache\$($repo.hash)"
+		$exists = Test-Path $Cache
+		if ($exists) {
+			$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
+			$OutOfDate = [DateTime]::Compare((Get-Date), $LastWrite + (New-TimeSpan -Days 1)) -gt 0
+		}
+		if (!$exists -or $OutOfDate -or $Fetch) {
+			try {
+				Write-Output "pwr: fetching tags from $($repo.uri)"
+				$tagList = Get-RepoTags $Repo
+				$pkgs = @{}
+				$names = @{}
+				foreach ($tag in $tagList.tags) {
+					if ($tag -match '([^-]+)-(.+)') {
+						$pkg = $Matches[1]
+						$ver = $Matches[2]
+						$names.$pkg = $null
+						$pkgs.$pkg = @($pkgs.$pkg) + @([SemanticVersion]::new($ver)) | Sort-Object
+					}
+				}
+				foreach ($name in $names.keys) {
+					$pkgs.$name = $pkgs.$name | ForEach-Object { $_.ToString() }
+				}
+			} catch {
+				Write-Host -ForegroundColor Red "pwr: failed to fetch tags from $($repo.uri)"
+				Write-Debug "    > $($Error[0])"
+			}
+			mkdir (Split-Path $Cache -Parent) -Force | Out-Null
+			[IO.File]::WriteAllText($Cache, (ConvertTo-Json $pkgs -Depth 50 -Compress))
+		}
+		$Repo.Packages = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+	}
+
+}
+
+function Test-PwrPackage($pkg) {
 	$PkgPath = Resolve-PwrPackge $pkg
 	return Test-Path "$PkgPath\.pwr"
 }
 
-function Invoke-PackagePull($pkg) {
-	$p = $pkg.Replace('-', ':')
-	if (Test-Package $pkg) {
-		Write-Output "pwr: $p already exists"
+function Invoke-PwrPackagePull($pkg) {
+	if (Test-PwrPackage $pkg) {
+		Write-Output "pwr: $($pkg.ref) already exists"
 	} else {
-		Write-Host "pwr: fetching ${p} ... " -NoNewline
-		$token = Get-DockerToken $PwrScope
-		$manifest = Get-DockerManifest $token $PwrScope $pkg
+		Write-Host "pwr: fetching $($pkg.ref) ... " -NoNewline
+		$manifest = Get-ImageManifest $pkg
 		$PkgPath = Resolve-PwrPackge $pkg
 		mkdir $PkgPath -Force | Out-Null
 		foreach ($layer in $manifest.layers) {
 			if ($layer.mediaType -eq "application/vnd.docker.image.rootfs.diff.tar.gzip") {
-				Invoke-PullDockerLayer $PkgPath $token $PwrScope $layer.digest
+				Invoke-PullImageLayer $PkgPath $pkg.repo $layer.digest
 			}
 		}
 		Write-Host 'done.'
 	}
 }
 
-
-function Invoke-PackageShell($pkg) {
+function Invoke-PwrPackageShell($pkg) {
 	$PkgPath = Resolve-PwrPackge $pkg
-	$vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | AsHashTable
+	$vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-HashTable
 	# Vars
 	foreach ($k in $vars.var.keys) {
 		Set-Variable -Name $k -Value $vars.var.$k -Scope 'global'
@@ -286,10 +296,10 @@ function Invoke-PackageShell($pkg) {
 	}
 }
 
-function Assert-NonEmptyPackages {
+function Assert-NonEmptyPwrPackages {
 	if ($Packages.Count -eq 0) {
-		if (Test-Path '.pwr') {
-			$script:Packages = (Get-Content '.pwr' | ConvertFrom-Json).Packages
+		if ($PwrConfig) {
+			$script:Packages = $PwrConfig.Packages
 		}
 	}
 	if ($Packages.Count -eq 0) {
@@ -297,26 +307,76 @@ function Assert-NonEmptyPackages {
 	}
 }
 
+function Get-PwrRepositories {
+	$rs = if ($Repositories) { $Repositories } elseif ($PwrConfig.Repositories) { $PwrConfig.Repositories } else { ,'airpower/shipyard' }
+	$repos = @()
+	foreach ($repo in $rs) {
+		$uri = $repo
+		$headers = @{}
+		if (-not $uri.Contains('/v2/')) {
+			$uri = "index.docker.io/v2/$uri"
+		}
+		if (-not $uri.StartsWith('http')) {
+			$uri = "https://$uri"
+		}
+		foreach ($auth in $PwrAuths.keys) {
+			if ($uri.StartsWith($auth)) {
+				if ($PwrAuths.$auth.basic) {
+					$headers.Authorization = "Basic $($PwrAuths.$auth.basic)"
+					break
+				}
+			}
+		}
+		$Repository = @{
+			URI = $uri
+			Scope = $uri.Substring($uri.IndexOf('/v2/') + 4)
+			Hash = Get-StringHash $uri
+		}
+		if ($headers.count -gt 0) {
+			$Repository.Headers = $headers
+		}
+		if ($uri.StartsWith('https://index.docker.io/v2/')) {
+			$Repository.IsDocker = $true
+		}
+		$repos += ,$Repository
+	}
+	return $repos
+}
+
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 
-$PwrScope = 'airpower/shipyard'
-$PwrPath = "$env:appdata\pwr"
-$Pkgs = Get-Packages
-mkdir $PwrPath -Force | Out-Null
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
 		Write-Host 'pwr: version 0.0.0'
+		exit
 	}
+	{$_ -in '', 'h', 'help'} {
+		Get-Help pwr -detailed
+		exit
+	}
+	'update' {
+		Invoke-Expression (Invoke-WebRequest 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1')
+		exit
+	}
+}
+
+$PwrPath = "$env:appdata\pwr"
+$PwrConfig = Get-Content '.pwr' -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+$PwrAuths = Get-Content "$PwrPath\auths.pwr" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
+$PwrRepositories = Get-PwrRepositories
+Get-PwrPackages
+
+switch ($Command) {
 	'fetch' {
-		Assert-NonEmptyPackages
+		Assert-NonEmptyPwrPackages
 		foreach ($p in $Packages) {
-			$pkg = Assert-Package $p
-			Invoke-PackagePull $pkg
+			$pkg = Assert-PwrPackage $p
+			Invoke-PwrPackagePull $pkg
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
-		Assert-NonEmptyPackages
+		Assert-NonEmptyPwrPackages
 		foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
 			if (($key -ne 'tmp') -and ($key -ne 'temp')) {
 				Clear-Item "env:$key" -Force -ErrorAction SilentlyContinue
@@ -325,46 +385,52 @@ switch ($Command) {
 		$s = Split-Path $MyInvocation.MyCommand.Path -Parent
 		$env:path = "\windows;\windows\system32;$s"
 		foreach ($p in $Packages) {
-			$pkg = Assert-Package $p
-			if (!(Test-Package $pkg)) {
-				Invoke-PackagePull $pkg
+			$pkg = Assert-PwrPackage $p
+			if (!(Test-PwrPackage $pkg)) {
+				Invoke-PwrPackagePull $pkg
 			}
-			Invoke-PackageShell $pkg
-			Write-Output "pwr: using $pkg"
+			Invoke-PwrPackageShell $pkg
+			Write-Output "pwr: using $($pkg.ref)"
 		}
 	}
 	{$_ -in 'ls', 'list'} {
-		if (($Packages.count -eq 1) -and ($Packages[0] -match '[^:]+')) {
-			$pkg = $Matches[0]
-			Write-Output $pkgs.$pkg | Format-List
-		} else {
-			Write-Output $pkgs | Format-List
+		foreach ($Repo in $PwrRepositories) {
+			if (($Packages.count -eq 1) -and ($Packages[0] -match '[^:]+')) {
+				$pkg = $Matches[0]
+				Write-Output "pwr: $pkg[$($Repo.uri)]"
+				if ($Repo.Packages.$pkg) {
+					Write-Output $Repo.Packages.$pkg | Format-List
+				} else {
+					Write-Output "<none>"
+				}
+			} else {
+				Write-Output "pwr: [$($Repo.uri)]"
+				if ('' -ne $Repo.Packages) {
+					Write-Output $Repo.Packages | Format-List
+				} else {
+					Write-Output "<none>"
+				}
+			}
 		}
 	}
 	{$_ -in 'rm', 'remove'} {
-		Assert-NonEmptyPackages
+		Assert-NonEmptyPwrPackages
 		$name = [IO.Path]::GetRandomFileName()
 		$empty = "$env:Temp\$name"
 		mkdir $empty | Out-Null
 		foreach ($p in $Packages) {
-			$pkg = Assert-Package $p
-			if (Test-Package $pkg) {
-				Write-Host "pwr: removing $pkg ... " -NoNewline
+			$pkg = Assert-PwrPackage $p
+			if (Test-PwrPackage $pkg) {
+				Write-Host "pwr: removing $($pkg.ref) ... " -NoNewline
 				$path = Resolve-PwrPackge $pkg
 				robocopy $empty $path /purge | Out-Null
 				Remove-Item $path
 				Write-Host 'done.'
 			} else {
-				Write-Output "pwr: $pkg not found"
+				Write-Output "pwr: $($pkg.ref) not found"
 			}
 		}
 		Remove-Item $empty
-	}
-	'update' {
-		Invoke-Expression (Invoke-WebRequest 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1')
-	}
-	{$_ -in 'h', 'help'} {
-		Get-Help pwr -detailed
 	}
 	Default {
 		Write-Host -ForegroundColor Red "pwr: no such command '$Command'"
