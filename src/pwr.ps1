@@ -23,17 +23,17 @@
 	  - Version must be in the form [Major[.Minor[.Patch]]] or 'latest'
 	  - If the Minor or Patch is omitted, the latest available is used
 	    (e.g. pkg:7 will select the latest version with Major version 7)
-	When this parameter is omitted, packges are read from a file named '.pwr' in the current working directory
+	When this parameter is omitted, packges are read from a file named 'pwr.json' in the current working directory
 	  - The file must have the form { "packages": ["pkg:7", ... ] }
 .PARAMETER Repositories
 	A list of OCI compliant container repositories
-	When this parameter is omitted and a file named '.pwr' exists the current working directory, repositories are read from that file
+	When this parameter is omitted and a file named 'pwr.json' exists the current working directory, repositories are read from that file
 	  - The file must have the form { "repositories": ["example.com/v2/some/repo"] }
 	  - The registry (e.g. 'example.com/v2/') may be omitted when the registry is DockerHub
-	When this parameter is omitted and no file is present, a default repository is use
+	When this parameter is omitted and no file is present, a default repository is used
 
 	In some cases, you will need to add authentication for custom repositories
-	  - A file located at '%appdata%\pwr\auths.pwr' is read
+	  - A file located at '%appdata%\pwr\auths.json' is read
 	  - The file must have the form { "<repo url>": { "basic": "<base64>" }, ... }
 #>
 param (
@@ -320,7 +320,8 @@ function Get-PwrRepositories {
 			$uri = "https://$uri"
 		}
 		foreach ($auth in $PwrAuths.keys) {
-			if ($uri.StartsWith($auth)) {
+			$authUri = if (-not $auth.StartsWith('http')) { "https://$auth" } else { $auth }
+			if ($uri.StartsWith($authUri)) {
 				if ($PwrAuths.$auth.basic) {
 					$headers.Authorization = "Basic $($PwrAuths.$auth.basic)"
 					break
@@ -362,8 +363,8 @@ switch ($Command) {
 }
 
 $PwrPath = "$env:appdata\pwr"
-$PwrConfig = Get-Content '.pwr' -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
-$PwrAuths = Get-Content "$PwrPath\auths.pwr" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
+$PwrConfig = Get-Content 'pwr.json' -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
 
