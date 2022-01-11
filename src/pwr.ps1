@@ -346,10 +346,11 @@ function Get-PwrRepositories {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
+$PwrVersion = '0.1.0'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
-		Write-Host 'pwr: version 0.0.0'
+		Write-Host "pwr: version $PwrVersion"
 		exit
 	}
 	{$_ -in '', 'h', 'help'} {
@@ -384,7 +385,7 @@ switch ($Command) {
 			}
 		}
 		$s = Split-Path $MyInvocation.MyCommand.Path -Parent
-		$env:path = "\windows;\windows\system32;$s"
+		$env:path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\;$s"
 		foreach ($p in $Packages) {
 			$pkg = Assert-PwrPackage $p
 			if (!(Test-PwrPackage $pkg)) {
