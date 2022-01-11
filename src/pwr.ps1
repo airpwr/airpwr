@@ -245,12 +245,12 @@ function Get-PwrPackages {
 				foreach ($name in $names.keys) {
 					$pkgs.$name = $pkgs.$name | ForEach-Object { $_.ToString() }
 				}
+				mkdir (Split-Path $Cache -Parent) -Force | Out-Null
+				[IO.File]::WriteAllText($Cache, (ConvertTo-Json $pkgs -Depth 50 -Compress))
 			} catch {
 				Write-Host -ForegroundColor Red "pwr: failed to fetch tags from $($repo.uri)"
 				Write-Debug "    > $($Error[0])"
 			}
-			mkdir (Split-Path $Cache -Parent) -Force | Out-Null
-			[IO.File]::WriteAllText($Cache, (ConvertTo-Json $pkgs -Depth 50 -Compress))
 		}
 		$Repo.Packages = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
 	}
@@ -346,7 +346,7 @@ function Get-PwrRepositories {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.1.0'
+$PwrVersion = '0.1.1'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
