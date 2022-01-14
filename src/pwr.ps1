@@ -303,7 +303,7 @@ function Assert-NonEmptyPwrPackages {
 		}
 	}
 	if ($Packages.Count -eq 0) {
-		Write-Error 'no packages provided'
+		Write-Error 'pwr: no packages provided'
 	}
 }
 
@@ -346,7 +346,7 @@ function Get-PwrRepositories {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.1.1'
+$PwrVersion = '0.2.0'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -378,14 +378,25 @@ switch ($Command) {
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
+		if (-not $env:InPwrShell) {
+			$env:InPwrShell = $true
+			$cmd = 'pwr sh'
+			if ($Packages) { $cmd += " -Packages $($Packages -join ',')" }
+			if ($Repositories) { $cmd += " Repositories $($Repositories -join ',')" }
+			try {
+				& powershell.exe -NoExit -Command "try { $cmd } catch { Write-Host -ForegroundColor red `$_; exit }"
+			} finally {
+				$env:InPwrShell = $null
+			}
+			break
+		}
 		Assert-NonEmptyPwrPackages
 		foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
 			if (($key -ne 'tmp') -and ($key -ne 'temp')) {
 				Clear-Item "env:$key" -Force -ErrorAction SilentlyContinue
 			}
 		}
-		$s = Split-Path $MyInvocation.MyCommand.Path -Parent
-		$env:path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\;$s"
+		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\"
 		foreach ($p in $Packages) {
 			$pkg = Assert-PwrPackage $p
 			if (!(Test-PwrPackage $pkg)) {
