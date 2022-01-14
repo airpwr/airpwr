@@ -92,6 +92,16 @@ Class SemanticVersion : System.IComparable {
 
 }
 
+function global:Prompt {
+	if ($env:InPwrShell) {
+		Write-Host "$([char]27)[94mpwr:$([char]27)[0m" -NoNewline
+		Write-Host " $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1))" -NoNewline
+		return " "
+	} else {
+		"PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) "
+	}
+}
+
 function Get-StringHash($s) {
 	$stream = [IO.MemoryStream]::new([byte[]][char[]]$s)
 	return (Get-FileHash -InputStream $stream).Hash.Substring(0, 12)
@@ -346,7 +356,7 @@ function Get-PwrRepositories {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.2.0'
+$PwrVersion = '0.2.1'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -403,7 +413,7 @@ switch ($Command) {
 				Invoke-PwrPackagePull $pkg
 			}
 			Invoke-PwrPackageShell $pkg
-			Write-Output "pwr: using $($pkg.ref)"
+			Write-Output "$([char]27)[94mpwr:$([char]27)[0m using $($pkg.ref)"
 		}
 	}
 	{$_ -in 'ls', 'list'} {
