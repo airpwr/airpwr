@@ -41,7 +41,7 @@ param (
 	[Parameter(Position=0)]
 	[string]$Command,
 	[Parameter(Position=1)]
-	[ValidatePattern('^[a-zA-Z0-9_-]+(:([0-9]+\.){0,2}[0-9]*)?$')]
+	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:([0-9]+\.){0,2}[0-9]*)?$))')]
 	[string[]]$Packages,
 	[string[]]$Repositories,
 	[switch]$Fetch
@@ -166,10 +166,22 @@ function Get-RepoTags($repo) {
 }
 
 function Resolve-PwrPackge($pkg) {
-	return "$PwrPath\pkg\$($pkg.tag)"
+	if ($pkg.Local) {
+		return $pkg.Path
+	} else {
+		return "$PwrPath\pkg\$($pkg.tag)"
+	}
 }
 
 function Split-PwrPackage($pkg) {
+	if ($pkg.StartsWith('file:///')) {
+		return @{
+			Name = $pkg
+			Ref = $pkg
+			Local = $true
+			Path = (Resolve-Path $pkg.Substring(8)).Path
+		}
+	}
 	$split = $pkg.Split(':')
 	switch ($split.count) {
 		2 {
@@ -206,6 +218,9 @@ function Get-LatestVersion($pkgs, $matcher) {
 
 function Assert-PwrPackage($pkg) {
 	$p = Split-PwrPackage $pkg
+	if ($p.Local) {
+		return $p
+	}
 	$name = $p.name
 	$version = $p.version
 	foreach ($Repo in $PwrRepositories) {
@@ -436,6 +451,9 @@ switch ($Command) {
 		Assert-NonEmptyPwrPackages
 		foreach ($p in $Packages) {
 			$pkg = Assert-PwrPackage $p
+			if ($pkg.Local) {
+				Write-Error "pwr: tried to fetch local package $($pkg.ref)"
+			}
 			Invoke-PwrPackagePull $pkg
 		}
 	}
@@ -443,7 +461,7 @@ switch ($Command) {
 		if ($env:InPwrShell) {
 			Restore-PSSessionState
 			$env:InPwrShell = $null
-			Write-Host 'pwr: shell session closed'
+			Write-Output 'pwr: shell session closed'
 		} else {
 			Write-Error "pwr: no shell session is in progress"
 		}
@@ -496,7 +514,9 @@ switch ($Command) {
 		mkdir $empty | Out-Null
 		foreach ($p in $Packages) {
 			$pkg = Assert-PwrPackage $p
-			if (Test-PwrPackage $pkg) {
+			if ($pkg.Local) {
+				Write-Error "pwr: tried to remove local package $($pkg.ref)"
+			} elseif (Test-PwrPackage $pkg) {
 				Write-Host "pwr: removing $($pkg.ref) ... " -NoNewline
 				$path = Resolve-PwrPackge $pkg
 				robocopy $empty $path /purge | Out-Null
