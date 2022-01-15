@@ -27,9 +27,9 @@ When a repository or registry needs authetication, `pwr` will look for an `auths
 An `auths.json` might look like:
 ```json
 {
-	"example.com/registry": {
-		"basic": "<base64 string>"
-	}
+    "example.com/registry": {
+        "basic": "<base64 string>"
+    }
 }
 ```
 
@@ -41,14 +41,14 @@ A `pwr.json` might look like:
 
 ```json
 {
-	"packages": [
-		"java:8",
-		"python"
-	],
-	"repositories": [
-		"airpower/shipyard",
-		"example.com/registry/v2/my/repo"
-	]
+    "packages": [
+        "java:8",
+        "python"
+    ],
+    "repositories": [
+        "airpower/shipyard",
+        "example.com/registry/v2/my/repo"
+    ]
 }
 ```
 # Usage
@@ -60,7 +60,8 @@ A `pwr.json` might look like:
 	 -Command <String>
 		list, ls                Displays all packages and their versions
 		fetch                   Downloads packages
-		shell, sh               Configures the current shell for the given package list
+		shell, sh               Configures the current shell for the given package list and starts a session
+		exit                    Exits the shell session and restores the pevious state
 		help, h                 Displays syntax and descriptive information for calling pwr
 		version, v              Displays this verion of pwr
 		remove, rm              Removes package data from the local machine

@@ -1,14 +1,15 @@
 <#
 .SYNOPSIS
-	pwr is a package manager to provide consistent tooling for software teams
+	A package manager and environment to provide consistent tooling for software teams.
 .DESCRIPTION
-	pwr enables configuration control for tools used to build and run software, allowing teams to maintain consistent, local environments when containerization technology cannot be employed
+	`pwr` provides declarative development environments to teams when traditional isolation and virtualization technologies cannot be employed. Calling pwr shell configures a consistent, local shell with the needed tools used to build and run software. This empowers teams to maintain consistentency in their build process and track configuration in version control systems (CaC).
 .LINK
 	https://github.com/airpwr/airpwr
 .PARAMETER Command
 	list, ls		Displays all packages and their versions
 	fetch			Downloads packages
-	shell, sh		Configures the current shell for the given package list
+	shell, sh		Configures the current shell for the given package list and starts a session
+	exit			Exits the shell session and restores the pevious state
 	help, h			Displays syntax and descriptive information for calling pwr
 	version, v		Displays this verion of pwr
 	remove, rm		Removes package data from the local machine
@@ -369,9 +370,60 @@ function Get-PwrRepositories {
 	return $repos
 }
 
+function Save-PSSessionState {
+	Write-Debug 'pwr: saving state'
+	$vars = @()
+	foreach ($v in (Get-Variable)) {
+		$vars += ,@{
+			Name = $v.Name
+			Value = $v.Value
+		}
+	}
+	$evars = @()
+	foreach ($v in (Get-Item env:*)) {
+		$evars += ,@{
+			Name = $v.Name
+			Value = $v.Value
+		}
+	}
+	Set-Variable -Name PwrSaveState -Value @{
+		Vars = $vars
+		Env = $evars
+	} -Scope 'global'
+}
+
+function Restore-PSSessionState {
+	Write-Debug 'pwr: restoring state'
+	$state = (Get-Variable 'PwrSaveState' -Scope 'global').Value
+	foreach ($v in $state.vars) {
+		Set-Variable -Name "$($v.Name)" -Value $v.Value -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+	}
+	Remove-Item -Path "env:*" -Force -ErrorAction 'SilentlyContinue'
+	foreach ($e in $state.env) {
+		Set-Item -Path "env:$($e.Name)" -Value $e.Value -Force -ErrorAction 'SilentlyContinue'
+	}
+	Set-Variable -Name PwrSaveState -Value $null -Scope 'Global'
+}
+
+function Clear-PSSessionState {
+	Write-Debug 'pwr: clearing state'
+	$DefaultVariableNames = '$', '?', '^', 'args', 'ConfirmPreference', 'ConsoleFileName', 'DebugPreference', 'Error', 'ErrorActionPreference', 'ErrorView', 'ExecutionContext', 'false', 'FormatEnumerationLimit', 'HOME', 'Host', 'InformationPreference', 'input', 'MaximumAliasCount', 'MaximumDriveCount', 'MaximumErrorCount', 'MaximumFunctionCount', 'MaximumHistoryCount', 'MaximumVariableCount', 'MyInvocation', 'NestedPromptLevel', 'null', 'OutputEncoding', 'PID', 'PROFILE', 'ProgressPreference', 'PSBoundParameters', 'PSCommandPath', 'PSCulture', 'PSDefaultParameterValues', 'PSEdition', 'PSEmailServer', 'PSHOME', 'PSScriptRoot', 'PSSessionApplicationName', 'PSSessionConfigurationName', 'PSSessionOption', 'PSUICulture', 'PSVersionTable', 'PWD', 'ShellId', 'StackTrace', 'true', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference', 'PwrSaveState'
+	$vars = Get-Variable -Scope 'global'
+	foreach ($var in $vars) {
+		if ($var.Name -notin $DefaultVariableNames) {
+			Remove-Variable -Name "$($var.Name)" -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+		}
+	}
+	foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
+		if (($key -ne 'tmp') -and ($key -ne 'temp')) {
+			Clear-Item "env:$key" -Force -ErrorAction SilentlyContinue
+		}
+	}
+}
+
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.2.1'
+$PwrVersion = '0.3.0'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -379,7 +431,7 @@ switch ($Command) {
 		exit
 	}
 	{$_ -in '', 'h', 'help'} {
-		Get-Help pwr -detailed
+		Get-Help $MyInvocation.MyCommand.Path -detailed
 		exit
 	}
 	'update' {
@@ -402,26 +454,27 @@ switch ($Command) {
 			Invoke-PwrPackagePull $pkg
 		}
 	}
+	'exit' {
+		if ($env:InPwrShell) {
+			Restore-PSSessionState
+			$env:InPwrShell = $null
+			Write-Host 'pwr: shell session closed'
+		} else {
+			Write-Error "pwr: no shell session is in progress"
+		}
+	}
 	{$_ -in 'sh', 'shell'} {
 		if (-not $env:InPwrShell) {
+			Save-PSSessionState
 			$env:InPwrShell = $true
-			$cmd = 'pwr sh'
-			if ($Packages) { $cmd += " -Packages $($Packages -join ',')" }
-			if ($Repositories) { $cmd += " Repositories $($Repositories -join ',')" }
-			try {
-				& powershell.exe -NoExit -Command "try { $cmd } catch { Write-Host -ForegroundColor red `$_; exit }"
-			} finally {
-				$env:InPwrShell = $null
-			}
+		} else {
+			Write-Error "pwr: cannot start a new shell session while one is in progress; use `pwr exit` to end the existing session"
 			break
 		}
 		Assert-NonEmptyPwrPackages
-		foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
-			if (($key -ne 'tmp') -and ($key -ne 'temp')) {
-				Clear-Item "env:$key" -Force -ErrorAction SilentlyContinue
-			}
-		}
-		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\"
+		Clear-PSSessionState
+		$pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
+		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\;$pwr"
 		foreach ($p in $Packages) {
 			$pkg = Assert-PwrPackage $p
 			if (!(Test-PwrPackage $pkg)) {
