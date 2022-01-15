@@ -49,9 +49,24 @@ function Test-Pwr-ShellVariableDeclaration {
 }
 
 function Test-Pwr-ShellEnvPath {
+	$_path = $env:path
 	pwr sh "file:///$PSScriptRoot\pkg1"
 	Invoke-PwrAssertTrue {
 		(example) -eq 'buzzbazz'
+	}
+	Invoke-PwrAssertTrue {
+		$env:path -ne $_path
+	}
+	pwr exit
+	Invoke-PwrAssertTrue {
+		$env:path -eq $_path
+	}
+}
+
+function Test-Pwr-ShellEnvOther {
+	pwr sh "file:///$PSScriptRoot\pkg1"
+	Invoke-PwrAssertTrue {
+		$env:any -eq 'thing'
 	}
 }
 

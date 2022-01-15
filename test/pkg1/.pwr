@@ -3,6 +3,7 @@
 		"testvar": "foobar"
 	},
 	"env": {
-		"path": "${.}\\cmd"
+		"path": "${.}\\cmd",
+		"any": "thing"
 	}
 }
