@@ -451,6 +451,9 @@ switch ($Command) {
 		Assert-NonEmptyPwrPackages
 		foreach ($p in $Packages) {
 			$pkg = Assert-PwrPackage $p
+			if ($pkg.Local) {
+				Write-Error "pwr: tried to fetch local package $($pkg.ref)"
+			}
 			Invoke-PwrPackagePull $pkg
 		}
 	}
