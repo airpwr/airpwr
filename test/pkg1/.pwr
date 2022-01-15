@@ -1,0 +1,8 @@
+{
+	"var": {
+		"testvar": "foobar"
+	},
+	"env": {
+		"path": "${.}\\cmd"
+	}
+}

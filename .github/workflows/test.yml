@@ -1,0 +1,11 @@
+name: Test pwr
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: windows-2022
+    steps:
+    - name: Test
+      run: |
+       .\test\run.ps1

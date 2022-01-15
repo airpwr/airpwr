@@ -458,7 +458,7 @@ switch ($Command) {
 		if ($env:InPwrShell) {
 			Restore-PSSessionState
 			$env:InPwrShell = $null
-			Write-Host 'pwr: shell session closed'
+			Write-Output 'pwr: shell session closed'
 		} else {
 			Write-Error "pwr: no shell session is in progress"
 		}
