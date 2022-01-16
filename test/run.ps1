@@ -41,6 +41,30 @@ function Test-Pwr-GlobalVariableIsolation {
 	}
 }
 
+function Test-Pwr-NonGlobalVariablePassThru {
+	$script:x = 'hi'
+	$y = 'there'
+	pwr sh "file:///$PSScriptRoot\pkg1"
+	Invoke-PwrAssertTrue {
+		$x -eq 'hi'
+		$y -eq 'there'
+	}
+	pwr exit
+	Invoke-PwrAssertTrue {
+		$x -eq 'hi'
+		$y -eq 'there'
+	}
+}
+
+function Test-Pwr-PackageProcessingBeforeShellInit {
+	Invoke-PwrAssertThrows {
+		pwr sh "does-not-exist"
+	}
+	Invoke-PwrAssertTrue {
+		$null -eq $env:InPwrShell
+	}
+}
+
 function Test-Pwr-ShellVariableDeclaration {
 	pwr sh "file:///$PSScriptRoot\pkg1"
 	Invoke-PwrAssertTrue {
@@ -76,7 +100,7 @@ Get-Item function:Test-Pwr-* | ForEach-Object {
 		Invoke-Expression $fn | Out-Null
 		Write-Host -ForegroundColor Green "[PASSED] $fn"
 	} catch {
-		$script:failed = $true
+		$env:PwrTestFail = $true
 		Write-Host -ForegroundColor Red "[FAILED] $fn`r`n`t> $_`r`n`t$($_.ScriptStackTrace.Split("`n")  -join "`r`n`t")"
 	} finally {
 		try {
@@ -85,6 +109,7 @@ Get-Item function:Test-Pwr-* | ForEach-Object {
 	}
 }
 
-if ($failed) {
+if ($env:PwrTestFail) {
+	$env:PwrTestFail = $null
 	Write-Error "Test failure"
 }

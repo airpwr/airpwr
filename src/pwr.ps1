@@ -416,14 +416,14 @@ function Clear-PSSessionState {
 	}
 	foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
 		if (($key -ne 'tmp') -and ($key -ne 'temp')) {
-			Clear-Item "env:$key" -Force -ErrorAction SilentlyContinue
+			Remove-Item "env:$key" -Force -ErrorAction SilentlyContinue
 		}
 	}
 }
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.3.0'
+$PwrVersion = '0.3.1'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -467,6 +467,15 @@ switch ($Command) {
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
+		Assert-NonEmptyPwrPackages
+		$pkgs = @()
+		foreach ($p in $Packages) {
+			$pkg = Assert-PwrPackage $p
+			if (!(Test-PwrPackage $pkg)) {
+				Invoke-PwrPackagePull $pkg
+			}
+			$pkgs += ,$pkg
+		}
 		if (-not $env:InPwrShell) {
 			Save-PSSessionState
 			$env:InPwrShell = $true
@@ -474,17 +483,12 @@ switch ($Command) {
 			Write-Error "pwr: cannot start a new shell session while one is in progress; use `pwr exit` to end the existing session"
 			break
 		}
-		Assert-NonEmptyPwrPackages
 		Clear-PSSessionState
 		$pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
 		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\;$pwr"
-		foreach ($p in $Packages) {
-			$pkg = Assert-PwrPackage $p
-			if (!(Test-PwrPackage $pkg)) {
-				Invoke-PwrPackagePull $pkg
-			}
-			Invoke-PwrPackageShell $pkg
-			Write-Output "$([char]27)[94mpwr:$([char]27)[0m using $($pkg.ref)"
+		foreach ($p in $pkgs) {
+			Invoke-PwrPackageShell $p
+			Write-Output "$([char]27)[94mpwr:$([char]27)[0m using $($p.ref)"
 		}
 	}
 	{$_ -in 'ls', 'list'} {
