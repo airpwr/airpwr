@@ -261,7 +261,7 @@ function Get-PwrPackages {
 				$pkgs = @{}
 				$names = @{}
 				foreach ($tag in $tagList.tags) {
-					if ($tag -match '([^-]+)-(.+)') {
+					if ($tag -match '(.+)-([0-9].+)') {
 						$pkg = $Matches[1]
 						$ver = $Matches[2]
 						$names.$pkg = $null
