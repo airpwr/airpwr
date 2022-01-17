@@ -243,6 +243,11 @@ function Assert-PwrPackage($pkg) {
 			return $p
 		}
 	}
+	if (-not $Fetch) {
+		$script:Fetch = $true
+		Get-PwrPackages
+		return Assert-PwrPackage $pkg
+	}
 	Write-Error "pwr: no package for ${name}:$version"
 }
 
@@ -423,7 +428,7 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.3.1'
+$PwrVersion = '0.3.2'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -484,11 +489,14 @@ switch ($Command) {
 			break
 		}
 		Clear-PSSessionState
-		$pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
-		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\;$pwr"
+		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\"
 		foreach ($p in $pkgs) {
 			Invoke-PwrPackageShell $p
 			Write-Output "$([char]27)[94mpwr:$([char]27)[0m using $($p.ref)"
+		}
+		if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
+			$pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
+			$env:Path = "$env:Path;$pwr"
 		}
 	}
 	{$_ -in 'ls', 'list'} {
