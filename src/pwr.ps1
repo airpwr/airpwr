@@ -103,6 +103,28 @@ function global:Prompt {
 	}
 }
 
+function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing) {
+	try {
+		return Invoke-WebRequest @PSBoundParameters
+	} catch {
+		if (-not $env:CurlExe) {
+			$env:CurlExe = (Get-ChildItem -Path $PwrPath -Recurse -Include 'curl.exe' | Select-Object -First 1).FullName
+		}
+		if (Test-Path -Path $env:CurlExe -PathType Leaf) {
+			Write-Debug "pwr: fallback to $env:CurlExe"
+			$expr = "$env:CurlExe -s -L --url '$Uri'"
+			foreach ($k in $Headers.Keys) {
+				$expr += " --header '${k}: $($Headers.$k)'"
+			}
+			if ($OutFile) {
+				$expr += " --output '$OutFile'"
+			}
+			return Invoke-Expression $expr
+		}
+		throw $_
+	}
+}
+
 function Get-StringHash($s) {
 	$stream = [IO.MemoryStream]::new([byte[]][char[]]$s)
 	return (Get-FileHash -InputStream $stream).Hash.Substring(0, 12)
@@ -126,8 +148,8 @@ function ConvertTo-HashTable {
 }
 
 function Get-DockerToken($repo) {
-	$resp = Invoke-WebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($repo.scope):pull"
-	return ($resp.content | ConvertFrom-Json).token
+	$resp = Invoke-PwrWebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($repo.scope):pull"
+	return ($resp | ConvertFrom-Json).token
 }
 
 function Get-ImageManifest($pkg) {
@@ -137,7 +159,7 @@ function Get-ImageManifest($pkg) {
 	} elseif ($pkg.repo.IsDocker) {
 		$headers.Authorization = "Bearer $(Get-DockerToken $pkg.repo)"
 	}
-	$resp = Invoke-WebRequest "$($pkg.repo.uri)/manifests/$($pkg.tag)" -Headers $headers -UseBasicParsing
+	$resp = Invoke-PwrWebRequest "$($pkg.repo.uri)/manifests/$($pkg.tag)" -Headers $headers -UseBasicParsing
 	return [string]$resp | ConvertFrom-Json
 }
 
@@ -149,7 +171,7 @@ function Invoke-PullImageLayer($out, $repo, $digest) {
 	} elseif ($repo.IsDocker) {
 		$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
 	}
-	Invoke-WebRequest "$($repo.uri)/blobs/$digest" -OutFile $tmp -Headers $headers
+	Invoke-PwrWebRequest "$($repo.uri)/blobs/$digest" -OutFile $tmp -Headers $headers
 	tar -xzf $tmp -C $out --exclude 'Hives/*' --strip-components 1
 	Remove-Item $tmp
 }
@@ -161,7 +183,7 @@ function Get-RepoTags($repo) {
 	} elseif ($repo.IsDocker) {
 		$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
 	}
-	$resp = Invoke-WebRequest "$($repo.uri)/tags/list" -Headers $headers -UseBasicParsing
+	$resp = Invoke-PwrWebRequest "$($repo.uri)/tags/list" -Headers $headers -UseBasicParsing
 	return [string]$resp | ConvertFrom-Json
 }
 
@@ -428,7 +450,7 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.3.2'
+$PwrVersion = '0.3.3'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -440,7 +462,20 @@ switch ($Command) {
 		exit
 	}
 	'update' {
-		Invoke-Expression (Invoke-WebRequest 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1')
+		$PwrCmd = "$env:appdata\pwr\cmd"
+		mkdir $PwrCmd -Force | Out-Null
+		Invoke-PwrWebRequest -UseBasicParsing 'https://api.github.com/repos/airpwr/airpwr/contents/src/pwr.ps1' | ConvertFrom-Json | ForEach-Object {
+			$content = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_.Content))
+			[IO.File]::WriteAllText("$PwrCmd\pwr.ps1", $content)
+		}
+		$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+		if (-not $UserPath.Contains($PwrCmd)) {
+			[Environment]::SetEnvironmentVariable('Path', "$UserPath;$PwrCmd", 'User')
+		}
+		if (-not ${env:Path}.Contains($PwrCmd)) {
+			$env:Path = "$env:Path;$PwrCmd"
+		}
+		pwr version
 		exit
 	}
 }
