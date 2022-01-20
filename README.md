@@ -60,8 +60,8 @@ A `pwr.json` might look like:
 	 -Command <String>
 			list, ls		Displays all packages and their versions
 			fetch			Downloads packages
-			shell, sh		Configures the terminal with the listed packges and starts a session
-			exit			Ends the session and restores the pevious terminal state
+			shell, sh		Configures the terminal with the listed packages and starts a session
+			exit			Ends the session and restores the previous terminal state
 			load			Loads packages into the terminal transparently to shell sessions
 			help, h			Displays syntax and descriptive information for calling pwr
 			version, v		Displays this verion of pwr
@@ -75,7 +75,7 @@ A `pwr.json` might look like:
 		  - Version must be in the form [Major[.Minor[.Patch]]] or 'latest'
 		  - If the Minor or Patch is omitted, the latest available is used
 			(e.g. pkg:7 will select the latest version with Major version 7)
-		When this parameter is omitted, packges are read from a file named 'pwr.json' in the current working directory
+		When this parameter is omitted, packages are read from a file named 'pwr.json' in the current working directory
 		  - The file must have the form { "packages": ["pkg:7", ... ] }
 
 	-Repositories <String[]>
@@ -90,7 +90,7 @@ A `pwr.json` might look like:
 		  - The file must have the form { "<repo url>": { "basic": "<base64>" }, ... }
 
 	-Fetch [<SwitchParameter>]
-		Forces the repository of packges to be synchronized from the upstream source
+		Forces the repository of packages to be synchronized from the upstream source
 		Otherwise, the cached repository is used and updated if older than one day
 
 ## Examples
