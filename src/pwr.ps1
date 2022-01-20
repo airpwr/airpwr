@@ -2,14 +2,15 @@
 .SYNOPSIS
 	A package manager and environment to provide consistent tooling for software teams.
 .DESCRIPTION
-	`pwr` provides declarative development environments to teams when traditional isolation and virtualization technologies cannot be employed. Calling pwr shell configures a consistent, local shell with the needed tools used to build and run software. This empowers teams to maintain consistentency in their build process and track configuration in version control systems (CaC).
+	`pwr` provides declarative development environments to teams when traditional isolation and virtualization technologies cannot be employed. Calling `pwr shell` configures a consistent, local shell with the needed tools used to build and run software. This empowers teams to maintain consistentency in their build process and track configuration in version control systems (CaC).
 .LINK
 	https://github.com/airpwr/airpwr
 .PARAMETER Command
 	list, ls		Displays all packages and their versions
 	fetch			Downloads packages
-	shell, sh		Configures the current shell for the given package list and starts a session
-	exit			Exits the shell session and restores the pevious state
+	shell, sh		Configures the terminal with the listed packges and starts a session
+	exit			Ends the session and restores the pevious terminal state
+	load			Loads packages into the terminal transparently to shell sessions
 	help, h			Displays syntax and descriptive information for calling pwr
 	version, v		Displays this verion of pwr
 	remove, rm		Removes package data from the local machine
@@ -95,7 +96,7 @@ Class SemanticVersion : System.IComparable {
 
 function global:Prompt {
 	if ($env:InPwrShell) {
-		Write-Host "$([char]27)[94mpwr:$([char]27)[0m" -NoNewline
+		Write-Host -ForegroundColor Blue -NoNewline "pwr:"
 		Write-Host " $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1))" -NoNewline
 		return " "
 	} else {
@@ -446,11 +447,12 @@ function Clear-PSSessionState {
 			Remove-Item "env:$key" -Force -ErrorAction SilentlyContinue
 		}
 	}
+	Remove-Item "env:PwrLoadedPackages" -Force -ErrorAction SilentlyContinue
 }
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.3.3'
+$PwrVersion = '0.4.0'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -506,6 +508,23 @@ switch ($Command) {
 			Write-Error "pwr: no shell session is in progress"
 		}
 	}
+	'load' {
+		Assert-NonEmptyPwrPackages
+		foreach ($p in $Packages) {
+			$pkg = Assert-PwrPackage $p
+			if (!(Test-PwrPackage $pkg)) {
+				Invoke-PwrPackagePull $pkg
+			}
+			if (-not "$env:PwrLoadedPackages".Contains($pkg.ref)) {
+				Invoke-PwrPackageShell $pkg
+				$env:PwrLoadedPackages = "$($pkg.ref) $env:PwrLoadedPackages"
+				Write-Host -ForegroundColor Blue "pwr:" -NoNewline
+				Write-Host " loaded $($pkg.ref)"
+			} else {
+				Write-Output "pwr: $($pkg.ref) already loaded"
+			}
+		}
+	}
 	{$_ -in 'sh', 'shell'} {
 		Assert-NonEmptyPwrPackages
 		$pkgs = @()
@@ -527,7 +546,8 @@ switch ($Command) {
 		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\"
 		foreach ($p in $pkgs) {
 			Invoke-PwrPackageShell $p
-			Write-Output "$([char]27)[94mpwr:$([char]27)[0m using $($p.ref)"
+			Write-Host -ForegroundColor Blue -NoNewline "pwr:"
+			Write-Host " using $($p.ref)"
 		}
 		if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
 			$pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
