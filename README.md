@@ -58,14 +58,15 @@ A `pwr.json` might look like:
 
 	PARAMETERS
 	 -Command <String>
-		list, ls                Displays all packages and their versions
-		fetch                   Downloads packages
-		shell, sh               Configures the current shell for the given package list and starts a session
-		exit                    Exits the shell session and restores the pevious state
-		help, h                 Displays syntax and descriptive information for calling pwr
-		version, v              Displays this verion of pwr
-		remove, rm              Removes package data from the local machine
-		update                  Updates the pwr command to the latest version
+			list, ls		Displays all packages and their versions
+			fetch			Downloads packages
+			shell, sh		Configures the terminal with the listed packges and starts a session
+			exit			Ends the session and restores the pevious terminal state
+			load			Loads packages into the terminal transparently to shell sessions
+			help, h			Displays syntax and descriptive information for calling pwr
+			version, v		Displays this verion of pwr
+			remove, rm		Removes package data from the local machine
+			update			Updates the pwr command to the latest version
 
 	-Packages <String[]>
 		A list of packages and their versions to be used in the fetch or shell command
