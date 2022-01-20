@@ -454,7 +454,7 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$env:PwrVersion = '0.4.1'
+$env:PwrVersion = '0.4.2'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
