@@ -1,8 +1,13 @@
+param (
+	[string]$TestName
+)
+
 $env:Path = "$PSScriptRoot\..\src;$env:Path"
 
+###### Assertions ######
 function Invoke-PwrAssertTrue($block) {
-	$r = Invoke-Command -ScriptBlock $block
-	if (-not $r) {
+	Invoke-Command -ScriptBlock $block | Out-Null
+	if (-not $?) {
 		Write-Error "Assertion Failed: $block"
 	}
 }
@@ -12,6 +17,27 @@ function Invoke-PwrAssertThrows($block) {
 		Invoke-Command -ScriptBlock $block | Out-Null
 		Write-Error "Assertion Failed to Throw: $block"
 	} catch { }
+}
+
+###### Tests ######
+function Test-Pwr-AssertMinVersion {
+	pwr v | Out-Null
+	Invoke-PwrAssertTrue {
+		pwr v -AssertMinimum '0.4.0'
+	}
+	Invoke-PwrAssertThrows {
+		pwr v -AssertMinimum "9$env:PwrVersion"
+	}
+	Invoke-PwrAssertThrows {
+		pwr v -AssertMinimum "${env:PwrVersion}9"
+	}
+	Invoke-PwrAssertTrue{
+		pwr v -AssertMinimum '0.0.0'
+	}
+	Invoke-PwrAssertThrows {
+		# Bad pattern
+		pwr v -AssertMinimum '9.0'
+	}
 }
 
 function Test-Pwr-FetchLocalPackageThrows {
@@ -127,8 +153,10 @@ function Test-Pwr-ShellEnvOther {
 	}
 }
 
-Get-Item function:Test-Pwr-* | ForEach-Object {
-	$fn = $_.Name
+###### Test Runner ######
+
+function Invoke-PwrTest($fn) {
+	
 	try {
 		Invoke-Expression $fn | Out-Null
 		Write-Host -ForegroundColor Green "[PASSED] $fn"
@@ -139,6 +167,17 @@ Get-Item function:Test-Pwr-* | ForEach-Object {
 		try {
 			pwr exit -ErrorAction 'SilentlyContinue' | Out-Null
 		} catch {}
+	}
+}
+
+switch ($TestName) {
+	'' {
+		Get-Item function:Test-Pwr-* | ForEach-Object {
+			Invoke-PwrTest $_.Name
+		}
+	}
+	Default {
+		Invoke-PwrTest "Test-Pwr-$TestName"
 	}
 }
 

@@ -45,7 +45,9 @@ param (
 	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:([0-9]+\.){0,2}[0-9]*)?$))')]
 	[string[]]$Packages,
 	[string[]]$Repositories,
-	[switch]$Fetch
+	[switch]$Fetch,
+	[ValidatePattern('^([0-9]+)\.([0-9]+)\.([0-9]+)$')]
+	[string]$AssertMinimum
 )
 
 Class SemanticVersion : System.IComparable {
@@ -79,9 +81,9 @@ Class SemanticVersion : System.IComparable {
 	[int] CompareTo([object]$Obj) {
 		if ($Obj -isnot [SemanticVersion]) {
 			return 1
-		} elseif (!($this.Major -eq $Obj.Major)) {
+		} elseif ($this.Major -ne $Obj.Major) {
 			return $Obj.Major - $this.Major
-		} elseif (!($this.Minor -eq $Obj.Minor)) {
+		} elseif ($this.Minor -ne $Obj.Minor) {
 			return $Obj.Minor - $this.Minor
 		} else {
 			return $Obj.Patch - $this.Patch
@@ -452,11 +454,19 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$PwrVersion = '0.4.0'
+$env:PwrVersion = '0.4.1'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
-		Write-Host "pwr: version $PwrVersion"
+		if ($AssertMinimum) {
+			$local:CurVer = [SemanticVersion]::new($env:PwrVersion)
+			$local:MinVer = [SemanticVersion]::new($AssertMinimum)
+			if ($CurVer.CompareTo($MinVer) -gt 0) {
+				Write-Error "$env:PwrVersion does not meet the minimum version $AssertMinimum"
+			}
+		} else {
+			Write-Output "pwr: version $env:PwrVersion"
+		}
 		exit
 	}
 	{$_ -in '', 'h', 'help'} {
@@ -579,21 +589,24 @@ switch ($Command) {
 		$name = [IO.Path]::GetRandomFileName()
 		$empty = "$env:Temp\$name"
 		mkdir $empty | Out-Null
-		foreach ($p in $Packages) {
-			$pkg = Assert-PwrPackage $p
-			if ($pkg.Local) {
-				Write-Error "pwr: tried to remove local package $($pkg.ref)"
-			} elseif (Test-PwrPackage $pkg) {
-				Write-Host "pwr: removing $($pkg.ref) ... " -NoNewline
-				$path = Resolve-PwrPackge $pkg
-				robocopy $empty $path /purge | Out-Null
-				Remove-Item $path
-				Write-Host 'done.'
-			} else {
-				Write-Output "pwr: $($pkg.ref) not found"
+		try {
+			foreach ($p in $Packages) {
+				$pkg = Assert-PwrPackage $p
+				if ($pkg.Local) {
+					Write-Error "pwr: tried to remove local package $($pkg.ref)"
+				} elseif (Test-PwrPackage $pkg) {
+					Write-Host "pwr: removing $($pkg.ref) ... " -NoNewline
+					$path = Resolve-PwrPackge $pkg
+					robocopy $empty $path /purge | Out-Null
+					Remove-Item $path
+					Write-Host 'done.'
+				} else {
+					Write-Output "pwr: $($pkg.ref) not found"
+				}
 			}
+		} finally {
+			Remove-Item $empty
 		}
-		Remove-Item $empty
 	}
 	Default {
 		Write-Host -ForegroundColor Red "pwr: no such command '$Command'"
