@@ -72,11 +72,44 @@ function Test-Pwr-ShellVariableDeclaration {
 	}
 }
 
+function Test-Pwr-LoadPackageOutSession {
+	pwr load "file:///$PSScriptRoot\pkg2"
+	Invoke-PwrAssertTrue {
+		(example2) -eq 'buzzbazz2'
+	}
+	pwr sh "file:///$PSScriptRoot\pkg1"
+	Invoke-PwrAssertTrue {
+		(example1) -eq 'buzzbazz1'
+	}
+	Invoke-PwrAssertThrows {
+		(example2) -eq 'buzzbazz2'
+	}
+	pwr exit
+	Invoke-PwrAssertTrue {
+		(example2) -eq 'buzzbazz2'
+	}
+}
+
+function Test-Pwr-LoadPackageInSession {
+	pwr sh "file:///$PSScriptRoot\pkg1"
+	pwr load "file:///$PSScriptRoot\pkg2"
+	Invoke-PwrAssertTrue {
+		(example2) -eq 'buzzbazz2'
+	}
+	Invoke-PwrAssertTrue {
+		(example1) -eq 'buzzbazz1'
+	}
+	pwr exit
+	Invoke-PwrAssertThrows {
+		(example2) -eq 'buzzbazz2'
+	}
+}
+
 function Test-Pwr-ShellEnvPath {
 	$_path = $env:path
 	pwr sh "file:///$PSScriptRoot\pkg1"
 	Invoke-PwrAssertTrue {
-		(example) -eq 'buzzbazz'
+		(example1) -eq 'buzzbazz1'
 	}
 	Invoke-PwrAssertTrue {
 		$env:path -ne $_path
