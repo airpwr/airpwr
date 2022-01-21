@@ -1,6 +1,6 @@
+# escape=`
 ARG BASE_REF
 FROM $BASE_REF
-SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'Continue';"]
-ARG REF
-RUN iex (iwr -UseBasicParsing "https://raw.githubusercontent.com/airpwr/airpwr/${env:REF}/src/install.ps1")
-CMD ["pwr", "version"]
+ADD .\src\pwr.ps1 \pwr\cmd\pwr.ps1
+RUN setx /M Path "\pwr\cmd;%Path%" && setx /M PwrHome "\pwr"
+CMD ["pwsh"]

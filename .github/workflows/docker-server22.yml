@@ -21,8 +21,8 @@ jobs:
     - name: Build and Push
       run: |
         $version = '${{ github.ref_name }}'.Substring(1)
-        $base = 'mcr.microsoft.com/windows/servercore:ltsc2022'
-        docker build -f Dockerfile -t local --build-arg BASE_REF=$base --build-arg REF=${{ github.ref_name }} .
+        $base = 'mcr.microsoft.com/powershell:windowsservercore-ltsc2022'
+        docker build -f Dockerfile -t local --build-arg BASE_REF=$base .
         $tag = "airpower/airpower:$version-windowsservercore-ltsc2022"
         docker image tag local $tag
         docker image push $tag

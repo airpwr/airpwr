@@ -113,7 +113,10 @@ function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing
 		if (-not $env:CurlExe) {
 			$env:CurlExe = (Get-ChildItem -Path $PwrPath -Recurse -Include 'curl.exe' | Select-Object -First 1).FullName
 		}
-		if (Test-Path -Path $env:CurlExe -PathType Leaf) {
+		if (-not $env:CurlExe) {
+			$env:CurlExe = 'curl.exe'
+		}
+		if (Test-Path -Path "$env:CurlExe" -PathType Leaf) {
 			Write-Debug "pwr: fallback to $env:CurlExe"
 			$expr = "$env:CurlExe -s -L --url '$Uri'"
 			foreach ($k in $Headers.Keys) {
@@ -445,7 +448,7 @@ function Clear-PSSessionState {
 		}
 	}
 	foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
-		if (($key -ne 'tmp') -and ($key -ne 'temp')) {
+		if ($key -notin 'temp', 'tmp', 'pwrhome', 'curlexe') {
 			Remove-Item "env:$key" -Force -ErrorAction SilentlyContinue
 		}
 	}
@@ -454,7 +457,7 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$env:PwrVersion = '0.4.2'
+$env:PwrVersion = '0.4.3'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -492,7 +495,7 @@ switch ($Command) {
 	}
 }
 
-$PwrPath = "$env:appdata\pwr"
+$PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrConfig = Get-Content 'pwr.json' -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
 $PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
