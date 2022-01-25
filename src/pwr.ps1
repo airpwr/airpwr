@@ -465,7 +465,7 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$env:PwrVersion = '0.4.5'
+$env:PwrVersion = '0.4.6'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -565,7 +565,6 @@ switch ($Command) {
 			break
 		}
 		Clear-PSSessionState
-		$env:Path = "\windows;\windows\system32;\windows\system32\windowspowershell\v1.0\"
 		foreach ($p in $pkgs) {
 			Invoke-PwrPackageShell $p
 			Write-Host -ForegroundColor Blue -NoNewline "pwr:"
@@ -575,6 +574,7 @@ switch ($Command) {
 			$pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
 			$env:Path = "$env:Path;$pwr"
 		}
+		$env:Path = "$env:Path;\windows;\windows\system32;\windows\system32\windowspowershell\v1.0"
 	}
 	{$_ -in 'ls', 'list'} {
 		foreach ($Repo in $PwrRepositories) {
