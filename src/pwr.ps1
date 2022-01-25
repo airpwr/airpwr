@@ -56,12 +56,14 @@ Class SemanticVersion : System.IComparable {
 	[int]$Major = 0
 	[int]$Minor = 0
 	[int]$Patch = 0
+	[int]$Build = 0
 
 	hidden init([string]$tag, [string]$pattern) {
 		if ($tag -match $pattern) {
-			$this.Major = if ($Matches.1) { $Matches.1 } else { 0 }
-			$this.Minor = if ($Matches.2) { $Matches.2 } else { 0 }
-			$this.Patch = if ($Matches.3) { $Matches.3 } else { 0 }
+			$this.Major = if ($Matches[1]) { $Matches[1] } else { 0 }
+			$this.Minor = if ($Matches[2]) { $Matches[2] } else { 0 }
+			$this.Patch = if ($Matches[3]) { $Matches[3] } else { 0 }
+			$this.Build = if ($Matches[4]) { "$($Matches[4])".Substring(1) } else { 0 }
 		}
 	}
 
@@ -70,7 +72,7 @@ Class SemanticVersion : System.IComparable {
 	}
 
 	SemanticVersion([string]$version) {
-		$this.init($version, '^([0-9]+)\.([0-9]+)\.([0-9]+)$')
+		$this.init($version, '^([0-9]+)\.([0-9]+)\.([0-9]+)(\+[0-9]+)?$')
 	}
 
 	SemanticVersion() { }
@@ -80,19 +82,21 @@ Class SemanticVersion : System.IComparable {
 	}
 
 	[int] CompareTo([object]$Obj) {
-		if ($Obj -isnot [SemanticVersion]) {
-			return 1
+		if ($Obj -isnot $this.GetType()) {
+			throw "cannot compare types $($Obj.GetType()) and $($this.GetType())"
 		} elseif ($this.Major -ne $Obj.Major) {
 			return $Obj.Major - $this.Major
 		} elseif ($this.Minor -ne $Obj.Minor) {
 			return $Obj.Minor - $this.Minor
-		} else {
+		} elseif ($this.Patch -ne $Obj.Patch) {
 			return $Obj.Patch - $this.Patch
+		} else {
+			return $Obj.Build - $this.Build
 		}
 	}
 
 	[string] ToString() {
-		return "$($this.Major).$($this.Minor).$($this.Patch)"
+		return "$($this.Major).$($this.Minor).$($this.Patch)$(if ($this.Build) {"+$($this.Build)"})"
 	}
 
 }
@@ -461,13 +465,13 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$env:PwrVersion = '0.4.4'
+$env:PwrVersion = '0.4.5'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
 		if ($AssertMinimum) {
-			$local:CurVer = [SemanticVersion]::new($env:PwrVersion)
-			$local:MinVer = [SemanticVersion]::new($AssertMinimum)
+			[SemanticVersion]$local:CurVer = [SemanticVersion]::new("$env:PwrVersion")
+			[SemanticVersion]$local:MinVer = [SemanticVersion]::new("$AssertMinimum")
 			if ($CurVer.CompareTo($MinVer) -gt 0) {
 				Write-Error "$env:PwrVersion does not meet the minimum version $AssertMinimum"
 			}

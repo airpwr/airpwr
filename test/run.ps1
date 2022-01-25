@@ -20,10 +20,43 @@ function Invoke-PwrAssertThrows($block) {
 }
 
 ###### Tests ######
+
+function Test-Pwr-BuildVersions {
+	. pwr v | Out-Null
+	Invoke-PwrAssertTrue {
+		$s = '1.2.3+4'
+		$v = [SemanticVersion]::new($s)
+		$s -eq $v.ToString()
+	}
+	Invoke-PwrAssertTrue {
+		$s = '1.2.3'
+		$v = [SemanticVersion]::new($s)
+		$s -eq $v.ToString()
+	}
+	Invoke-PwrAssertTrue {
+		[SemanticVersion]::new('1.1.1').CompareTo([SemanticVersion]::new('1.1.1+0')) -eq 0
+	}
+	Invoke-PwrAssertTrue {
+		[SemanticVersion]::new('1.1.1').CompareTo([SemanticVersion]::new('1.1.1+1')) -lt 0
+	}
+	Invoke-PwrAssertTrue {
+		[SemanticVersion]::new('1.1.1').CompareTo([SemanticVersion]::new('1.1.0+1')) -gt 0
+	}
+	Invoke-PwrAssertTrue {
+		[SemanticVersion]::new('1.1.1+1').CompareTo([SemanticVersion]::new('1.1.1+1')) -eq 0
+	}
+	Invoke-PwrAssertTrue {
+		[SemanticVersion]::new('1.1.1+1').CompareTo([SemanticVersion]::new('1.1.1+2')) -gt 0
+	}
+	Invoke-PwrAssertTrue {
+		[SemanticVersion]::new('1.1.1+2').CompareTo([SemanticVersion]::new('1.1.1+1')) -lt 0
+	}
+}
+
 function Test-Pwr-AssertMinVersion {
 	pwr v | Out-Null
 	Invoke-PwrAssertTrue {
-		pwr v -AssertMinimum '0.4.0'
+		pwr v -AssertMinimum "$env:PwrVersion"
 	}
 	Invoke-PwrAssertThrows {
 		pwr v -AssertMinimum "9$env:PwrVersion"
@@ -156,7 +189,7 @@ function Test-Pwr-ShellEnvOther {
 ###### Test Runner ######
 
 function Invoke-PwrTest($fn) {
-	
+
 	try {
 		Invoke-Expression $fn | Out-Null
 		Write-Host -ForegroundColor Green "[PASSED] $fn"
