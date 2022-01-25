@@ -47,7 +47,8 @@ param (
 	[string[]]$Repositories,
 	[switch]$Fetch,
 	[ValidatePattern('^([0-9]+)\.([0-9]+)\.([0-9]+)$')]
-	[string]$AssertMinimum
+	[string]$AssertMinimum,
+	[switch]$Offline
 )
 
 Class SemanticVersion : System.IComparable {
@@ -107,6 +108,9 @@ function global:Prompt {
 }
 
 function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing) {
+	if ($Offline) {
+		Write-Error 'pwr: web request while running offline'
+	}
 	try {
 		return Invoke-WebRequest @PSBoundParameters
 	} catch {
@@ -287,7 +291,7 @@ function Get-PwrPackages {
 			$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
 			$OutOfDate = [DateTime]::Compare((Get-Date), $LastWrite + (New-TimeSpan -Days 1)) -gt 0
 		}
-		if (!$exists -or $OutOfDate -or $Fetch) {
+		if ((-not $Offline) -and (-not $exists -or $OutOfDate -or $Fetch)) {
 			try {
 				Write-Output "pwr: fetching tags from $($repo.uri)"
 				$tagList = Get-RepoTags $Repo
@@ -457,7 +461,7 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$env:PwrVersion = '0.4.3'
+$env:PwrVersion = '0.4.4'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -493,6 +497,16 @@ switch ($Command) {
 		pwr version
 		exit
 	}
+	'exit' {
+		if ($env:InPwrShell) {
+			Restore-PSSessionState
+			$env:InPwrShell = $null
+			Write-Output 'pwr: shell session closed'
+		} else {
+			Write-Error "pwr: no shell session is in progress"
+		}
+		exit
+	}
 }
 
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
@@ -510,15 +524,6 @@ switch ($Command) {
 				Write-Error "pwr: tried to fetch local package $($pkg.ref)"
 			}
 			Invoke-PwrPackagePull $pkg
-		}
-	}
-	'exit' {
-		if ($env:InPwrShell) {
-			Restore-PSSessionState
-			$env:InPwrShell = $null
-			Write-Output 'pwr: shell session closed'
-		} else {
-			Write-Error "pwr: no shell session is in progress"
 		}
 	}
 	'load' {
