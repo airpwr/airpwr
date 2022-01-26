@@ -15,9 +15,6 @@
 	version, v		Displays this verion of pwr
 	remove, rm		Removes package data from the local machine
 	update			Updates the pwr command to the latest version
-.PARAMETER Fetch
-	Forces the repository of packages to be synchronized from the upstream source
-	Otherwise, the cached repository is used and updated if older than one day
 .PARAMETER Packages
 	A list of packages and their versions to be used in the fetch or shell command
 	Must be in the form name[:version]
@@ -37,6 +34,9 @@
 	In some cases, you will need to add authentication for custom repositories
 	  - A file located at '%appdata%\pwr\auths.json' is read
 	  - The file must have the form { "<repo url>": { "basic": "<base64>" }, ... }
+.PARAMETER Fetch
+	Forces the repository of packages to be synchronized from the upstream source
+	Otherwise, the cached repository is used and updated if older than one day
 #>
 param (
 	[Parameter(Position=0)]
@@ -465,7 +465,8 @@ function Clear-PSSessionState {
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
-$env:PwrVersion = '0.4.6'
+$PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
+$env:PwrVersion = '0.4.7'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -513,7 +514,6 @@ switch ($Command) {
 	}
 }
 
-$PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrConfig = Get-Content 'pwr.json' -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
 $PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
