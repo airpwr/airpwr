@@ -93,6 +93,18 @@ A `pwr.json` might look like:
 		Forces the repository of packages to be synchronized from the upstream source
 		Otherwise, the cached repository is used and updated if older than one day
 
+	-Offline [<SwitchParameter>]
+		Prevents attempts to request a web resource
+
+	-AssertMinimum <String>
+		Writes an error if the provided semantic version (a.b.c) is not met by this scripts version
+		Must be called with the `version` command
+
+	-Override [<SwitchParameter>]
+		Overrides `pwr.json` package versions with the versions provided by the `Packages` parameter
+		The package must be declared in the configuration file
+		The package must not be expressed by a file URI
+
 ## Examples
 
 Configuring a development shell

@@ -37,6 +37,15 @@
 .PARAMETER Fetch
 	Forces the repository of packages to be synchronized from the upstream source
 	Otherwise, the cached repository is used and updated if older than one day
+.PARAMETER Offline
+	Prevents attempts to request a web resource
+.PARAMETER AssertMinimum
+	Writes an error if the provided semantic version (a.b.c) is not met by this scripts version
+	Must be called with the `version` command
+.PARAMETER Override
+	Overrides `pwr.json` package versions with the versions provided by the `Packages` parameter
+	The package must be declared in the configuration file
+	The package must not be expressed by a file URI
 #>
 param (
 	[Parameter(Position=0)]
@@ -48,7 +57,8 @@ param (
 	[switch]$Fetch,
 	[ValidatePattern('^([0-9]+)\.([0-9]+)\.([0-9]+)$')]
 	[string]$AssertMinimum,
-	[switch]$Offline
+	[switch]$Offline,
+	[switch]$Override
 )
 
 Class SemanticVersion : System.IComparable {
@@ -463,10 +473,48 @@ function Clear-PSSessionState {
 	Remove-Item "env:PwrLoadedPackages" -Force -ErrorAction SilentlyContinue
 }
 
+function Resolve-PwrPackageOverrides {
+	if (-not $Override) {
+		return
+	}
+	if (-not $PwrConfig) {
+		Write-Error "pwr: no configuration found to override"
+	}
+	$PkgOverride = @{}
+	foreach ($p in $Packages) {
+		$pkg = Split-PwrPackage $p
+		$PkgOverride.$($pkg.name) = $pkg
+	}
+	$pkgs = @()
+	foreach ($p in $PwrConfig.Packages) {
+		$split = Split-PwrPackage $p
+		$pkg = $PkgOverride.$($split.name)
+		if ($pkg) {
+			if ($pkg.local) {
+				Write-Error "pwr: tried to override local package $p"
+			}
+			$over = "$($pkg.name):$($pkg.version)"
+			Write-Debug "pwr: overriding $p with $over"
+			$pkgs += $over
+			$PkgOverride.Remove($pkg.name)
+		} else {
+			$pkgs += $p
+		}
+	}
+	foreach ($key in $PkgOverride.keys) {
+		if ($PkgOverride.$key.local) {
+			Write-Error "pwr: tried to override local package $key"
+		} else {
+			Write-Error "pwr: cannot override absent package ${key}:$($PkgOverride.$key.version)"
+		}
+	}
+	[string[]]$script:Packages = $pkgs
+}
+
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
-$env:PwrVersion = '0.4.7'
+$env:PwrVersion = '0.4.8'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -506,7 +554,7 @@ switch ($Command) {
 		if ($env:InPwrShell) {
 			Restore-PSSessionState
 			$env:InPwrShell = $null
-			Write-Output 'pwr: shell session closed'
+			Write-Debug 'pwr: shell session closed'
 		} else {
 			Write-Error "pwr: no shell session is in progress"
 		}
@@ -518,6 +566,7 @@ $PwrConfig = Get-Content 'pwr.json' -ErrorAction 'SilentlyContinue' | ConvertFro
 $PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
+Resolve-PwrPackageOverrides
 
 switch ($Command) {
 	'fetch' {
