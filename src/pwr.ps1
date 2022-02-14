@@ -187,7 +187,7 @@ function Invoke-PullImageLayer($out, $repo, $digest) {
 		$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
 	}
 	Invoke-PwrWebRequest "$($repo.uri)/blobs/$digest" -OutFile $tmp -Headers $headers
-	tar -xzf $tmp -C $out --exclude 'Hives/*' --strip-components 1
+	& "C:\WINDOWS\system32\tar.exe" -xzf $tmp -C $out --exclude 'Hives/*' --strip-components 1
 	Remove-Item $tmp
 }
 
