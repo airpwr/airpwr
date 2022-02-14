@@ -125,27 +125,18 @@ function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing
 	if ($Offline) {
 		Write-Error 'pwr: web request while running offline'
 	}
-	try {
+	if ($env:PwrWebPath -and (Test-Path -Path "$env:PwrWebPath" -PathType Leaf)) {
+		Write-Debug "pwr: using http client $env:PwrWebPath"
+		$expr = "$env:PwrWebPath -s -L --url '$Uri'"
+		foreach ($k in $Headers.Keys) {
+			$expr += " --header '${k}: $($Headers.$k)'"
+		}
+		if ($OutFile) {
+			$expr += " --output '$OutFile'"
+		}
+		return Invoke-Expression $expr
+	} else {
 		return Invoke-WebRequest @PSBoundParameters
-	} catch {
-		if (-not $env:CurlExe) {
-			$env:CurlExe = (Get-ChildItem -Path $PwrPath -Recurse -Include 'curl.exe' | Select-Object -First 1).FullName
-		}
-		if (-not $env:CurlExe) {
-			$env:CurlExe = 'curl.exe'
-		}
-		if (Test-Path -Path "$env:CurlExe" -PathType Leaf) {
-			Write-Debug "pwr: fallback to $env:CurlExe"
-			$expr = "$env:CurlExe -s -L --url '$Uri'"
-			foreach ($k in $Headers.Keys) {
-				$expr += " --header '${k}: $($Headers.$k)'"
-			}
-			if ($OutFile) {
-				$expr += " --output '$OutFile'"
-			}
-			return Invoke-Expression $expr
-		}
-		throw $_
 	}
 }
 
@@ -466,7 +457,7 @@ function Clear-PSSessionState {
 		}
 	}
 	foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
-		if ($key -notin 'temp', 'tmp', 'pwrhome', 'curlexe') {
+		if ($key -notin 'temp', 'tmp', 'pwrhome', 'pwrwebpath') {
 			Remove-Item "env:$key" -Force -ErrorAction SilentlyContinue
 		}
 	}
@@ -514,7 +505,7 @@ function Resolve-PwrPackageOverrides {
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
-$env:PwrVersion = '0.4.8'
+$env:PwrVersion = '0.4.9'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
