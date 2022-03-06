@@ -54,7 +54,7 @@ A `pwr.json` might look like:
 # Usage
 
 	SYNTAX
-	pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [<CommonParameters>]
+	pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-DaysOld <Int32>] [-Offline] [-Override] [-WhatIf] [-Confirm] [<CommonParameters>]
 
 	PARAMETERS
 	 -Command <String>
@@ -104,6 +104,16 @@ A `pwr.json` might look like:
 		Overrides `pwr.json` package versions with the versions provided by the `Packages` parameter
 		The package must be declared in the configuration file
 		The package must not be expressed by a file URI
+
+	-DaysOld <Int32>
+		Use with the `remove` command to delete packages that have not been used within the specified period of days
+		When this parameter is used, `Packages` must be empty
+
+	-Installed [<SwitchParameter>]
+		Use with the `list` command to enumerate the packages installed on the local machine
+
+	-WhatIf [<SwitchParameter>]
+		Use with the `remove` command to show the dry-run of packages to remove
 
 ## Examples
 

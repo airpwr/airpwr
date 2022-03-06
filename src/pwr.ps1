@@ -46,7 +46,15 @@
 	Overrides `pwr.json` package versions with the versions provided by the `Packages` parameter
 	The package must be declared in the configuration file
 	The package must not be expressed by a file URI
+.PARAMETER DaysOld
+	Use with the `remove` command to delete packages that have not been used within the specified period of days
+	When this parameter is used, `Packages` must be empty
+.PARAMETER Installed
+	Use with the `list` command to enumerate the packages installed on the local machine
+.PARAMETER WhatIf
+	Use with the `remove` command to show the dry-run of packages to remove
 #>
+[CmdletBinding(SupportsShouldProcess)]
 param (
 	[Parameter(Position=0)]
 	[string]$Command,
@@ -55,8 +63,11 @@ param (
 	[string[]]$Packages,
 	[string[]]$Repositories,
 	[switch]$Fetch,
+	[switch]$Installed,
 	[ValidatePattern('^([0-9]+)\.([0-9]+)\.([0-9]+)$')]
 	[string]$AssertMinimum,
+	[ValidatePattern('^[1-9][0-9]*$')]
+	[int]$DaysOld,
 	[switch]$Offline,
 	[switch]$Override
 )
@@ -206,7 +217,7 @@ function Resolve-PwrPackge($pkg) {
 	if ($pkg.Local) {
 		return $pkg.Path
 	} else {
-		return "$PwrPath\pkg\$($pkg.tag)"
+		return "$PwrPkgPath\$($pkg.tag)"
 	}
 }
 
@@ -464,6 +475,30 @@ function Clear-PSSessionState {
 	Remove-Item "env:PwrLoadedPackages" -Force -ErrorAction SilentlyContinue
 }
 
+function Remove-Directory($dir) {
+	$name = [IO.Path]::GetRandomFileName()
+	$empty = "$env:Temp\$name"
+	mkdir $empty | Out-Null
+	try {
+		robocopy $empty $dir /purge | Out-Null
+		Remove-Item $dir
+	} finally {
+		Remove-Item $empty
+	}
+}
+
+function Get-InstalledPwrPackages {
+	$pkgs = @{}
+	Get-ChildItem -Path $PwrPkgPath | ForEach-Object {
+		if ($_.Name -match '(.+)-([0-9].+)') {
+			$pkg = $Matches[1]
+			$ver = $Matches[2]
+			$pkgs.$pkg += ,$ver
+		}
+	}
+	return $pkgs
+}
+
 function Resolve-PwrPackageOverrides {
 	if (-not $Override) {
 		return
@@ -505,7 +540,8 @@ function Resolve-PwrPackageOverrides {
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
-$env:PwrVersion = '0.4.9'
+$PwrPkgPath = "$PwrPath\pkg"
+$env:PwrVersion = '0.4.10'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -617,6 +653,10 @@ switch ($Command) {
 		$env:Path = "$env:Path;\windows;\windows\system32;\windows\system32\windowspowershell\v1.0"
 	}
 	{$_ -in 'ls', 'list'} {
+		if ($Installed) {
+			Get-InstalledPwrPackages | Format-Table
+			break
+		}
 		foreach ($Repo in $PwrRepositories) {
 			if (($Packages.count -eq 1) -and ($Packages[0] -match '[^:]+')) {
 				$pkg = $Matches[0]
@@ -637,27 +677,41 @@ switch ($Command) {
 		}
 	}
 	{$_ -in 'rm', 'remove'} {
-		Assert-NonEmptyPwrPackages
-		$name = [IO.Path]::GetRandomFileName()
-		$empty = "$env:Temp\$name"
-		mkdir $empty | Out-Null
-		try {
+		if ($DaysOld) {
+			if ($Packages.Count -gt 0) {
+				Write-Error "pwr: -DaysOld not compatible with -Packages"
+			}
+			$pkgs = Get-InstalledPwrPackages
+			foreach ($name in $pkgs.keys) {
+				foreach ($ver in $pkgs.$name) {
+					$PkgRoot = "$PwrPkgPath\$name-$ver"
+					$item = Get-ChildItem -Path "$PkgRoot\.pwr"
+					$item.LastAccessTime = $item.LastAccessTime
+					$old = $item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
+					if ($old -and $PSCmdlet.ShouldProcess("${name}:$ver", "remove pwr package")) {
+						Write-Host "pwr: removing ${name}:$ver ... " -NoNewline
+						Remove-Directory $PkgRoot
+						Write-Host 'done.'
+					}
+				}
+			}
+		} else {
+			Assert-NonEmptyPwrPackages
 			foreach ($p in $Packages) {
 				$pkg = Assert-PwrPackage $p
 				if ($pkg.Local) {
 					Write-Error "pwr: tried to remove local package $($pkg.ref)"
 				} elseif (Test-PwrPackage $pkg) {
-					Write-Host "pwr: removing $($pkg.ref) ... " -NoNewline
-					$path = Resolve-PwrPackge $pkg
-					robocopy $empty $path /purge | Out-Null
-					Remove-Item $path
-					Write-Host 'done.'
+					if ($PSCmdlet.ShouldProcess($pkg.ref, "remove pwr package")) {
+						Write-Host "pwr: removing $($pkg.ref) ... " -NoNewline
+						$path = Resolve-PwrPackge $pkg
+						Remove-Directory $path
+						Write-Host 'done.'
+					}
 				} else {
 					Write-Output "pwr: $($pkg.ref) not found"
 				}
 			}
-		} finally {
-			Remove-Item $empty
 		}
 	}
 	Default {
