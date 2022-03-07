@@ -373,6 +373,8 @@ function Invoke-PwrPackageShell($pkg) {
 		}
 		Set-Item "env:$k" "$prefix$($vars.env.$k)"
 	}
+	$item = Get-ChildItem -Path "$PkgPath\.pwr"
+	$item.LastAccessTime = (Get-Date)
 }
 
 function Assert-NonEmptyPwrPackages {
