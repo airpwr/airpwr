@@ -480,7 +480,7 @@ function Remove-Directory($dir) {
 	$empty = "$env:Temp\$name"
 	mkdir $empty | Out-Null
 	try {
-		robocopy $empty $dir /purge | Out-Null
+		robocopy $empty $dir /purge /MT | Out-Null
 		Remove-Item $dir
 	} finally {
 		Remove-Item $empty
