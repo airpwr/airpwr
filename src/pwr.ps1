@@ -543,7 +543,7 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.10'
+$env:PwrVersion = '0.4.11'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -610,19 +610,25 @@ switch ($Command) {
 	}
 	'load' {
 		Assert-NonEmptyPwrPackages
-		foreach ($p in $Packages) {
-			$pkg = Assert-PwrPackage $p
-			if (!(Test-PwrPackage $pkg)) {
-				Invoke-PwrPackagePull $pkg
+		$_Path = $env:Path
+		Clear-Item env:Path
+		try {
+			foreach ($p in $Packages) {
+				$pkg = Assert-PwrPackage $p
+				if (!(Test-PwrPackage $pkg)) {
+					Invoke-PwrPackagePull $pkg
+				}
+				if (-not "$env:PwrLoadedPackages".Contains($pkg.ref)) {
+					Invoke-PwrPackageShell $pkg
+					$env:PwrLoadedPackages = "$($pkg.ref) $env:PwrLoadedPackages"
+					Write-Host -ForegroundColor Blue "pwr:" -NoNewline
+					Write-Host " loaded $($pkg.ref)"
+				} else {
+					Write-Output "pwr: $($pkg.ref) already loaded"
+				}
 			}
-			if (-not "$env:PwrLoadedPackages".Contains($pkg.ref)) {
-				Invoke-PwrPackageShell $pkg
-				$env:PwrLoadedPackages = "$($pkg.ref) $env:PwrLoadedPackages"
-				Write-Host -ForegroundColor Blue "pwr:" -NoNewline
-				Write-Host " loaded $($pkg.ref)"
-			} else {
-				Write-Output "pwr: $($pkg.ref) already loaded"
-			}
+		} finally {
+			$env:Path = "$env:Path;$_Path"
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
