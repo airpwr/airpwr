@@ -561,7 +561,7 @@ switch ($Command) {
 		exit
 	}
 	'update' {
-		$PwrCmd = "$env:appdata\pwr\cmd"
+		$PwrCmd = "$PwrPath\cmd"
 		mkdir $PwrCmd -Force | Out-Null
 		Invoke-PwrWebRequest -UseBasicParsing 'https://api.github.com/repos/airpwr/airpwr/contents/src/pwr.ps1' | ConvertFrom-Json | ForEach-Object {
 			$content = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_.Content))
@@ -574,7 +574,7 @@ switch ($Command) {
 		if (-not ${env:Path}.Contains($PwrCmd)) {
 			$env:Path = "$env:Path;$PwrCmd"
 		}
-		pwr version
+		& "$PwrCmd\pwr.ps1" version
 		exit
 	}
 	'exit' {
