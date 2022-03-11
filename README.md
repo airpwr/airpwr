@@ -4,6 +4,14 @@ A package manager and environment to provide consistent tooling for software tea
 
 `pwr` provides declarative development environments to teams when traditional isolation and virtualization technologies cannot be employed. Calling `pwr shell` configures a consistent, local shell with the needed tools used to build and run software. This empowers teams to maintain consistentency in their build process and track configuration in version control systems (CaC).
 
+# Requirements
+
+`pwr` requires the use of `C:\Windows\System32\tar.exe`, which is only availble on Windows builds greater than `17063`.
+
+Use the following command in a `powershell` terminal to determine your build version.
+
+	[Environment]::OSVersion.Version
+
 # Installing
 
 ## Powershell (recommended)
@@ -51,6 +59,13 @@ A `pwr.json` might look like:
     ]
 }
 ```
+
+## Environment Variables
+| Name | Default Value | Description |
+|--|--|--|
+| `PwrHome` | `$env:AppData\pwr` | The location `pwr` uses for package storage and other data caching. |
+| `PwrWebPath` | `C:\Windows\System32\curl.exe` | All web requests will use the provided executable. It must conform to the `curl` command line interface. |
+
 # Usage
 
 	SYNTAX

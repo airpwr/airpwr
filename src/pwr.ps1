@@ -136,9 +136,9 @@ function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing
 	if ($Offline) {
 		Write-Error 'pwr: web request while running offline'
 	}
-	if ($env:PwrWebPath -and (Test-Path -Path "$env:PwrWebPath" -PathType Leaf)) {
-		Write-Debug "pwr: using http client $env:PwrWebPath"
-		$expr = "$env:PwrWebPath -s -L --url '$Uri'"
+	if ($PwrWebPath -and (Test-Path -Path $PwrWebPath -PathType Leaf)) {
+		Write-Debug "pwr: using http client $PwrWebPath"
+		$expr = "$PwrWebPath -s -L --url '$Uri'"
 		foreach ($k in $Headers.Keys) {
 			$expr += " --header '${k}: $($Headers.$k)'"
 		}
@@ -542,8 +542,9 @@ function Resolve-PwrPackageOverrides {
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
+$PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.11'
+$env:PwrVersion = '0.4.12'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
