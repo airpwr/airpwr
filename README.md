@@ -18,7 +18,7 @@ Use the following command in a `powershell` terminal to determine your build ver
 
 Open a powershell terminal and execute the following command:
 
-	iex (iwr 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1')
+	iex (iwr 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1' -UseBasicParsing)
 
 The installer downloads the `pwr` cmdlet and puts its location on the user path.
 
