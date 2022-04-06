@@ -478,12 +478,18 @@ function Clear-PSSessionState {
 }
 
 function Remove-Directory($dir) {
+	$wh = "${dir}_wh_"
+	try {
+		Move-Item $dir -Destination $wh
+	} catch {
+		Write-Error "pwr: cannot remove $dir because it is being used by another process"
+	}
 	$name = [IO.Path]::GetRandomFileName()
 	$empty = "$env:Temp\$name"
 	mkdir $empty | Out-Null
 	try {
-		robocopy $empty $dir /purge /MT | Out-Null
-		Remove-Item $dir
+		robocopy $empty $wh /purge /MT | Out-Null
+		Remove-Item $wh
 	} finally {
 		Remove-Item $empty
 	}
@@ -544,7 +550,7 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.12'
+$env:PwrVersion = '0.4.13'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
@@ -694,7 +700,12 @@ switch ($Command) {
 			foreach ($name in $pkgs.keys) {
 				foreach ($ver in $pkgs.$name) {
 					$PkgRoot = "$PwrPkgPath\$name-$ver"
-					$item = Get-ChildItem -Path "$PkgRoot\.pwr"
+					try {
+						$item = Get-ChildItem -Path "$PkgRoot\.pwr"
+					} catch {
+						Write-Warning "pwr: $PkgRoot is not a pwr package; it should be removed manually"
+						continue
+					}
 					$item.LastAccessTime = $item.LastAccessTime
 					$old = $item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
 					if ($old -and $PSCmdlet.ShouldProcess("${name}:$ver", "remove pwr package")) {
