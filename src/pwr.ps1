@@ -21,7 +21,7 @@
 	  - When the version is omitted, the latest available is used
 	  - Version must be in the form [Major[.Minor[.Patch]]] or 'latest'
 	  - If the Minor or Patch is omitted, the latest available is used
-	    (e.g. pkg:7 will select the latest version with Major version 7)
+		(e.g. pkg:7 will select the latest version with Major version 7)
 	When this parameter is omitted, packages are read from a file named 'pwr.json' in the current working directory
 	  - The file must have the form { "packages": ["pkg:7", ... ] }
 .PARAMETER Repositories
@@ -191,13 +191,17 @@ function Get-ImageManifest($pkg) {
 
 function Invoke-PullImageLayer($out, $repo, $digest) {
 	$tmp = "$env:temp/$($digest.Replace(':', '_')).tgz"
-	$headers = @{}
-	if ($repo.Headers.Authorization) {
-		$headers.Authorization = $repo.Headers.Authorization
-	} elseif ($repo.IsDocker) {
-		$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
+	if (-not ((Test-Path -Path $tmp -PathType Leaf) -and (Get-FileHash -Path $tmp -Algorithm SHA256).Hash -eq $digest.Replace('sha256:', ''))) {
+		$headers = @{}
+		if ($repo.Headers.Authorization) {
+			$headers.Authorization = $repo.Headers.Authorization
+		} elseif ($repo.IsDocker) {
+			$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
+		}
+		Invoke-PwrWebRequest "$($repo.uri)/blobs/$digest" -OutFile $tmp -Headers $headers
+	} else {
+		Write-Host "using cache ... " -NoNewline
 	}
-	Invoke-PwrWebRequest "$($repo.uri)/blobs/$digest" -OutFile $tmp -Headers $headers
 	& "C:\WINDOWS\system32\tar.exe" -xzf $tmp -C $out --exclude 'Hives/*' --strip-components 1
 	Remove-Item $tmp
 }
@@ -550,7 +554,7 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.13'
+$env:PwrVersion = '0.4.14'
 
 switch ($Command) {
 	{$_ -in 'v', 'version'} {
