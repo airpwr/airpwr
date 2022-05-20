@@ -130,6 +130,12 @@ A `pwr.json` might look like:
 	-WhatIf [<SwitchParameter>]
 		Use with the `remove` command to show the dry-run of packages to remove
 
+	-Run <String>
+		Executes the user-defined script inside a shell session
+		The script is declared like { ..., "scripts": { "name": "something to run" } } in a pwr.json file
+		Additional arguments are passed to the script when the value of this parameter includes the delimiter "--" with subsequent text
+		Scripts support pre and post actions when accompanying keys "pre<name>" or "post<name>" exist
+
 ## Examples
 
 Configuring a development shell
