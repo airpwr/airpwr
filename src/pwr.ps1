@@ -64,7 +64,7 @@ param (
 	[Parameter(Position = 0)]
 	[string]$Command,
 	[Parameter(Position = 1)]
-	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:([0-9]+\.){0,2}[0-9]*)?$))')]
+	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]*)|latest)?(:([a-zA-Z0-9_-]+))?)?))$')]
 	[string[]]$Packages,
 	[string[]]$Repositories,
 	[switch]$Fetch,
@@ -90,7 +90,7 @@ Class SemanticVersion : System.IComparable {
 			$this.Major = if ($Matches[1]) { $Matches[1] } else { 0 }
 			$this.Minor = if ($Matches[2]) { $Matches[2] } else { 0 }
 			$this.Patch = if ($Matches[3]) { $Matches[3] } else { 0 }
-			$this.Build = if ($Matches[4]) { "$($Matches[4])".Substring(1) } else { 0 }
+			$this.Build = if ($Matches[4]) { $Matches[4].Substring(1) } else { 0 }
 		}
 	}
 
@@ -105,20 +105,20 @@ Class SemanticVersion : System.IComparable {
 	SemanticVersion() { }
 
 	[bool] LaterThan([object]$Obj) {
-		return $this.CompareTo($obj) -lt 0
+		return $this.CompareTo($obj) -gt 0
 	}
 
 	[int] CompareTo([object]$Obj) {
 		if ($Obj -isnot $this.GetType()) {
 			throw "cannot compare types $($Obj.GetType()) and $($this.GetType())"
 		} elseif ($this.Major -ne $Obj.Major) {
-			return $Obj.Major - $this.Major
+			return $this.Major - $Obj.Major
 		} elseif ($this.Minor -ne $Obj.Minor) {
-			return $Obj.Minor - $this.Minor
+			return $this.Minor - $Obj.Minor
 		} elseif ($this.Patch -ne $Obj.Patch) {
-			return $Obj.Patch - $this.Patch
+			return $this.Patch - $Obj.Patch
 		} else {
-			return $Obj.Build - $this.Build
+			return $this.Build - $Obj.Build
 		}
 	}
 
@@ -233,35 +233,36 @@ function Resolve-PwrPackge($pkg) {
 
 function Split-PwrPackage($pkg) {
 	if ($pkg.StartsWith('file:///')) {
+		$split = $pkg.Split('<')
+		$uri = $split[0].trim()
 		return @{
-			Name  = $pkg
-			Ref   = $pkg
-			Local = $true
-			Path  = (Resolve-Path $pkg.Substring(8)).Path
+			Name   = $uri
+			Ref    = $uri
+			Local  = $true
+			Path   = (Resolve-Path $uri.Substring(8)).Path
+			Config = if ($split[1]) { $split[1].trim() } else { 'default' }
 		}
 	}
 	$split = $pkg.Split(':')
-	switch ($split.count) {
-		2 {
-			return @{
-				Name    = $split[0]
-				Version = $split[1]
-			}
-		}
-		Default {
-			return @{
-				Name    = $pkg
-				Version = 'latest'
-			}
-		}
+	$props = @{
+		Name    = $split[0]
+		Version = 'latest'
+		Config  = 'default'
 	}
+	if ($split.count -ge 2 -and ($split[1] -ne '')) {
+		$props.Version = $split[1]
+	}
+	if ($split.count -ge 3 -and ($split[2] -ne '')) {
+		$props.Config = $split[2]
+	}
+	return $props;
 }
 
 function Get-LatestVersion($pkgs, $matcher) {
 	$latest = $null
 	foreach ($v in $pkgs) {
 		$ver = [SemanticVersion]::new($v, '([0-9]+)\.([0-9]+)\.([0-9]+)')
-		if (($null -eq $latest) -or ($ver.CompareTo($latest) -lt 0)) {
+		if (($null -eq $latest) -or ($ver.LaterThan($latest))) {
 			if ($matcher -and ($v -notmatch $matcher)) {
 				continue
 			}
@@ -371,17 +372,26 @@ function Invoke-PwrPackagePull($pkg) {
 function Invoke-PwrPackageShell($pkg) {
 	$PkgPath = Resolve-PwrPackge $pkg
 	$vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-HashTable
+	if ($pkg.config -eq 'default') {
+		$pkgvar = $vars
+	} else {
+		if (-not $vars."$($pkg.config)") {
+			Write-Error "pwr: configuration $($pkg.config) not defined for package $($pkg.name)"
+		}
+		$pkgvar = $vars."$($pkg.config)"
+	}
+	Format-Table $pkgenv
 	# Vars
-	foreach ($k in $vars.var.keys) {
-		Set-Variable -Name $k -Value $vars.var.$k -Scope 'global'
+	foreach ($k in $pkgvar.var.keys) {
+		Set-Variable -Name $k -Value $pkgvar.var.$k -Scope 'global'
 	}
 	# Env
-	foreach ($k in $vars.env.keys) {
+	foreach ($k in $pkgvar.env.keys) {
 		$prefix = ''
 		if ($k -eq 'path') {
 			$prefix += "${env:path};"
 		}
-		Set-Item "env:$k" "$prefix$($vars.env.$k)"
+		Set-Item "env:$k" "$prefix$($pkgvar.env.$k)"
 	}
 	$item = Get-ChildItem -Path "$PkgPath\.pwr"
 	$item.LastAccessTime = (Get-Date)
@@ -590,15 +600,15 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.15'
+$env:PwrVersion = '0.4.16'
 
 if (-not $Run) {
 	switch ($Command) {
 		{$_ -in 'v', 'version'} {
 			if ($AssertMinimum) {
-				[SemanticVersion]$local:CurVer = [SemanticVersion]::new("$env:PwrVersion")
-				[SemanticVersion]$local:MinVer = [SemanticVersion]::new("$AssertMinimum")
-				if ($CurVer.CompareTo($MinVer) -gt 0) {
+				$local:CurVer = [SemanticVersion]::new([string]"$env:PwrVersion")
+				$local:MinVer = [SemanticVersion]::new([string]"$AssertMinimum")
+				if ($CurVer.CompareTo($MinVer) -lt 0) {
 					Write-Error "$env:PwrVersion does not meet the minimum version $AssertMinimum"
 				}
 			} else {
@@ -706,7 +716,13 @@ switch ($Command) {
 		}
 		Clear-PSSessionState
 		foreach ($p in $pkgs) {
-			Invoke-PwrPackageShell $p
+			try {
+				Invoke-PwrPackageShell $p
+			} catch {
+				Restore-PSSessionState
+				$env:InPwrShell = $null
+				throw $_
+			}
 			Write-Host -ForegroundColor Blue -NoNewline 'pwr:'
 			Write-Host " using $($p.ref)"
 		}

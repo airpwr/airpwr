@@ -6,8 +6,8 @@ $env:Path = "$PSScriptRoot\..\src;$env:Path"
 
 ###### Assertions ######
 function Invoke-PwrAssertTrue($block) {
-	Invoke-Command -ScriptBlock $block | Out-Null
-	if (-not $?) {
+	$result = Invoke-Command -ScriptBlock $block
+	if ((-not $?) -or (-not $result)) {
 		Write-Error "Assertion Failed: $block"
 	}
 }
@@ -17,6 +17,14 @@ function Invoke-PwrAssertThrows($block) {
 		Invoke-Command -ScriptBlock $block | Out-Null
 		Write-Error "Assertion Failed to Throw: $block"
 	} catch { }
+}
+
+function Invoke-PwrAssertNoThrows($block) {
+	try {
+		Invoke-Command -ScriptBlock $block | Out-Null
+	} catch {
+		Write-Error "Assertion Threw: $_"
+	}
 }
 
 ###### Tests ######
@@ -46,16 +54,16 @@ function Test-Pwr-BuildVersions {
 		[SemanticVersion]::new('1.1.1+1').CompareTo([SemanticVersion]::new('1.1.1+1')) -eq 0
 	}
 	Invoke-PwrAssertTrue {
-		[SemanticVersion]::new('1.1.1+1').CompareTo([SemanticVersion]::new('1.1.1+2')) -gt 0
+		[SemanticVersion]::new('1.1.1+1').CompareTo([SemanticVersion]::new('1.1.1+2')) -lt 0
 	}
 	Invoke-PwrAssertTrue {
-		[SemanticVersion]::new('1.1.1+2').CompareTo([SemanticVersion]::new('1.1.1+1')) -lt 0
+		[SemanticVersion]::new('1.1.1+2').CompareTo([SemanticVersion]::new('1.1.1+1')) -gt 0
 	}
 }
 
 function Test-Pwr-AssertMinVersion {
-	pwr v | Out-Null
-	Invoke-PwrAssertTrue {
+	. pwr v | Out-Null
+	Invoke-PwrAssertNoThrows {
 		pwr v -AssertMinimum "$env:PwrVersion"
 	}
 	Invoke-PwrAssertThrows {
@@ -64,7 +72,7 @@ function Test-Pwr-AssertMinVersion {
 	Invoke-PwrAssertThrows {
 		pwr v -AssertMinimum "${env:PwrVersion}9"
 	}
-	Invoke-PwrAssertTrue{
+	Invoke-PwrAssertNoThrows {
 		pwr v -AssertMinimum '0.0.0'
 	}
 	Invoke-PwrAssertThrows {
@@ -186,10 +194,23 @@ function Test-Pwr-ShellEnvOther {
 	}
 }
 
+function Test-Pwr-AltConfig {
+	pwr sh "file:///$PSScriptRoot\pkg3 < alt"
+	Invoke-PwrAssertTrue {
+		$env:any -eq 'bazzy'
+	}
+}
+
+function Test-Pwr-DefaultConfig {
+	pwr sh "file:///$PSScriptRoot\pkg3"
+	Invoke-PwrAssertTrue {
+		$env:any -eq 'buzzy'
+	}
+}
+
 ###### Test Runner ######
 
 function Invoke-PwrTest($fn) {
-
 	try {
 		Invoke-Expression $fn | Out-Null
 		Write-Host -ForegroundColor Green "[PASSED] $fn"

@@ -1,0 +1,1 @@
+Write-Output 'foobar3'

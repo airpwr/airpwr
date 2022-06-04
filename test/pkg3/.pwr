@@ -1,0 +1,18 @@
+{
+	"var": {
+		"testvar": "foobar"
+	},
+	"env": {
+		"path": "${.}\\cmd",
+		"any": "buzzy"
+	},
+	"alt": {
+		"var": {
+			"testvar": "altconfig"
+		},
+		"env": {
+			"path": "${.}\\cmdalt",
+			"any": "bazzy"
+		}
+	}
+}
