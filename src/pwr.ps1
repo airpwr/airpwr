@@ -312,6 +312,33 @@ function Assert-PwrPackage($pkg) {
 	Write-Error "pwr: no package for ${name}:$version"
 }
 
+function Compare-PwrTags {
+	$Cache = "$PwrPath\cache\PwrTags"
+	$exists = Test-Path $Cache
+	if ($exists) {
+		$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
+		$OutOfDate = [DateTime]::Compare((Get-Date), $LastWrite + (New-TimeSpan -Days 1)) -gt 0
+	}
+	if ((-not $Offline) -and (-not $exists -or $OutOfDate -or $Fetch)) {
+		try {
+			$req = Invoke-PwrWebRequest -Uri 'https://api.github.com/repos/airpwr/airpwr/tags' -UseBasicParsing
+			mkdir (Split-Path $Cache -Parent) -Force | Out-Null
+			[IO.File]::WriteAllText($Cache, $req)
+		} catch { }
+	}
+	$tags = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+	$latest = [SemanticVersion]::new()
+	foreach ($tag in $tags) {
+		$ver = [SemanticVersion]::new($tag.name.Substring(1))
+		if ($ver.LaterThan($latest)) {
+			$latest = $ver
+		}
+	}
+	if ($latest.LaterThan([SemanticVersion]::new($env:PwrVersion))) {
+		Write-Host -ForegroundColor Green "pwr: a new version ($latest) is available!"
+	}
+}
+
 function Get-PwrPackages {
 	foreach ($Repo in $PwrRepositories) {
 		$Cache = "$PwrPath\cache\$($repo.hash)"
@@ -378,7 +405,7 @@ function Invoke-PwrPackageShell($pkg) {
 		$pkgvar = $vars
 	} else {
 		if (-not $vars."$($pkg.config)") {
-			Write-Error "pwr: configuration $($pkg.config) not defined for package $($pkg.name)"
+			Write-Error "pwr: no such configuration '$($pkg.config)' for $($pkg.ref)"
 		}
 		$pkgvar = $vars."$($pkg.config)"
 	}
@@ -603,6 +630,7 @@ $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
 $env:PwrVersion = '0.4.17'
+Compare-PwrTags
 
 if (-not $Run) {
 	switch ($Command) {
