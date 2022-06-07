@@ -7,6 +7,7 @@
 	https://github.com/airpwr/airpwr
 .PARAMETER Command
 	list, ls		Displays all packages and their versions
+	ls-config		Displays all configurations for a package
 	fetch			Downloads packages
 	shell, sh		Configures the terminal with the listed packages and starts a session
 	exit			Ends the session and restores the previous terminal state
@@ -17,11 +18,12 @@
 	update			Updates the pwr command to the latest version
 .PARAMETER Packages
 	A list of packages and their versions to be used in the fetch or shell command
-	Must be in the form name[:version]
+	Must be in the form name[:version][:configuration]
 	  - When the version is omitted, the latest available is used
 	  - Version must be in the form [Major[.Minor[.Patch]]] or 'latest'
 	  - If the Minor or Patch is omitted, the latest available is used
 		(e.g. pkg:7 will select the latest version with Major version 7)
+	  - When the configuration is omitted, the default used
 	When this parameter is omitted, packages are read from a file named 'pwr.json' in the current working directory
 	  - The file must have the form { "packages": ["pkg:7", ... ] }
 .PARAMETER Repositories
@@ -64,7 +66,7 @@ param (
 	[Parameter(Position = 0)]
 	[string]$Command,
 	[Parameter(Position = 1)]
-	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]*)|latest)?(:([a-zA-Z0-9_-]+))?)?))$')]
+	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]+)|latest|(?=:))(:([a-zA-Z0-9_-]+))?)?))$')]
 	[string[]]$Packages,
 	[string[]]$Repositories,
 	[switch]$Fetch,
@@ -600,7 +602,7 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.16'
+$env:PwrVersion = '0.4.17'
 
 if (-not $Run) {
 	switch ($Command) {
@@ -731,6 +733,27 @@ switch ($Command) {
 			$env:Path = "$env:Path;$pwr"
 		}
 		$env:Path = "$env:Path;\windows;\windows\system32;\windows\system32\windowspowershell\v1.0"
+	}
+	'ls-config' {
+		foreach ($p in $Packages) {
+			$pkg = Assert-PwrPackage $p
+			if (!(Test-PwrPackage $pkg)) {
+				Write-Error "pwr: package $($pkg.ref) is not installed"
+			}
+			$local:pkgpath = Resolve-PwrPackge $pkg
+			$local:pwrcfg = Get-Content -Raw "$local:pkgpath\.pwr" | ConvertFrom-Json | ConvertTo-HashTable
+			Write-Output "$($pkg.ref)"
+			$local:configs = @('default')
+			foreach ($local:key in $local:pwrcfg.keys) {
+				if (($local:key -eq 'env') -or ($local:key -eq 'var')) {
+					continue
+				}
+				$local:configs += $local:key
+			}
+			foreach ($local:config in ($local:configs | Sort-Object)) {
+				Write-Output "  $local:config"
+			}
+		}
 	}
 	{$_ -in 'ls', 'list'} {
 		if ($Installed) {
