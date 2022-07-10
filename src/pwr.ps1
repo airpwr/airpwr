@@ -629,7 +629,7 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.17'
+$env:PwrVersion = '0.4.18'
 Compare-PwrTags
 
 if (-not $Run) {
