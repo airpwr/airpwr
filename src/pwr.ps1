@@ -576,7 +576,7 @@ function Resolve-PwrPackageOverrides {
 			if ($pkg.local) {
 				Write-Error "pwr: tried to override local package $p"
 			}
-			$over = "$($pkg.name):$($pkg.version)"
+			$over = "$($pkg.name):$($pkg.version):$($pkg.config)"
 			Write-Debug "pwr: overriding $p with $over"
 			$pkgs += $over
 			$PkgOverride.Remove($pkg.name)
@@ -629,7 +629,7 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.17'
+$env:PwrVersion = '0.4.18'
 Compare-PwrTags
 
 if (-not $Run) {
