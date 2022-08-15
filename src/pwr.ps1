@@ -138,8 +138,8 @@ Class SemanticVersion : System.IComparable {
 
 function global:Prompt {
 	if ($env:InPwrShell) {
-		Write-PwrHost -ForegroundColor Blue -NoNewline 'pwr:'
-		Write-PwrHost " $($ExecutionContext.SessionState.Path.CurrentLocation)$('>' * ($NestedPromptLevel + 1))" -NoNewline
+		Write-Host -ForegroundColor Blue -NoNewline 'pwr:'
+		Write-Host " $($ExecutionContext.SessionState.Path.CurrentLocation)$('>' * ($NestedPromptLevel + 1))" -NoNewline
 		return ' '
 	} else {
 		"PS $($ExecutionContext.SessionState.Path.CurrentLocation)$('>' * ($NestedPromptLevel + 1)) "
