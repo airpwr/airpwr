@@ -50,7 +50,7 @@ A `pwr.json` might look like:
 ```json
 {
     "packages": [
-        "java:8",
+        "jdk:8",
         "python"
     ],
     "repositories": [
@@ -64,12 +64,11 @@ A `pwr.json` might look like:
 | Name | Default Value | Description |
 |--|--|--|
 | `PwrHome` | `$env:AppData\pwr` | The location `pwr` uses for package storage and other data caching. |
-| `PwrWebPath` | `C:\Windows\System32\curl.exe` | All web requests will use the provided executable. It must conform to the `curl` command line interface. |
 
 # Usage
 
 	SYNTAX
-	pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-DaysOld <Int32>] [-Offline] [-Override] [-WhatIf] [-Confirm] [<CommonParameters>]
+	pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-DaysOld <Int32>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf] [-Confirm] [<CommonParameters>]
 
 	PARAMETERS
 	 -Command <String>
@@ -112,6 +111,12 @@ A `pwr.json` might look like:
 
 	-Offline [<SwitchParameter>]
 		Prevents attempts to request a web resource
+
+	-Quiet [<SwitchParameter>]
+		Suppresses all output to stdout
+
+	-Silent [<SwitchParameter>]
+		Suppresses all output to stdout and stderr
 
 	-AssertMinimum <String>
 		Writes an error if the provided semantic version (a.b.c) is not met by this scripts version
