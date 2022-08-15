@@ -41,6 +41,10 @@
 	Otherwise, the cached repository is used and updated if older than one day
 .PARAMETER Offline
 	Prevents attempts to request a web resource
+.PARAMETER Quiet
+	Suppresses all output to stdout
+.PARAMETER Silent
+	Suppresses all output to stdout and stderr
 .PARAMETER AssertMinimum
 	Writes an error if the provided semantic version (a.b.c) is not met by this scripts version
 	Must be called with the `version` command
@@ -76,6 +80,8 @@ param (
 	[ValidatePattern('^[1-9][0-9]*$')]
 	[int]$DaysOld,
 	[switch]$Offline,
+	[switch]$Quiet,
+	[switch]$Silent,
 	[switch]$Override,
 	[string]$Run
 )
@@ -87,81 +93,111 @@ Class SemanticVersion : System.IComparable {
 	[int]$Patch = 0
 	[int]$Build = 0
 
-	hidden init([string]$tag, [string]$pattern) {
-		if ($tag -match $pattern) {
-			$this.Major = if ($Matches[1]) { $Matches[1] } else { 0 }
-			$this.Minor = if ($Matches[2]) { $Matches[2] } else { 0 }
-			$this.Patch = if ($Matches[3]) { $Matches[3] } else { 0 }
-			$this.Build = if ($Matches[4]) { $Matches[4].Substring(1) } else { 0 }
+	hidden init([string]$Tag, [string]$Pattern) {
+		if ($Tag -match $Pattern) {
+			$This.Major = if ($Matches[1]) { $Matches[1] } else { 0 }
+			$This.Minor = if ($Matches[2]) { $Matches[2] } else { 0 }
+			$This.Patch = if ($Matches[3]) { $Matches[3] } else { 0 }
+			$This.Build = if ($Matches[4]) { $Matches[4].Substring(1) } else { 0 }
 		}
 	}
 
-	SemanticVersion([string]$tag, [string]$pattern) {
-		$this.init($tag, $pattern)
+	SemanticVersion([string]$Tag, [string]$Pattern) {
+		$This.init($Tag, $Pattern)
 	}
 
-	SemanticVersion([string]$version) {
-		$this.init($version, '^([0-9]+)\.([0-9]+)\.([0-9]+)(\+[0-9]+)?$')
+	SemanticVersion([string]$Version) {
+		$This.init($Version, '^([0-9]+)\.([0-9]+)\.([0-9]+)(\+[0-9]+)?$')
 	}
 
 	SemanticVersion() { }
 
 	[bool] LaterThan([object]$Obj) {
-		return $this.CompareTo($obj) -gt 0
+		return $This.CompareTo($Obj) -gt 0
 	}
 
 	[int] CompareTo([object]$Obj) {
-		if ($Obj -isnot $this.GetType()) {
-			throw "cannot compare types $($Obj.GetType()) and $($this.GetType())"
-		} elseif ($this.Major -ne $Obj.Major) {
-			return $this.Major - $Obj.Major
-		} elseif ($this.Minor -ne $Obj.Minor) {
-			return $this.Minor - $Obj.Minor
-		} elseif ($this.Patch -ne $Obj.Patch) {
-			return $this.Patch - $Obj.Patch
+		if ($Obj -isnot $This.GetType()) {
+			throw "cannot compare types $($Obj.GetType()) and $($This.GetType())"
+		} elseif ($This.Major -ne $Obj.Major) {
+			return $This.Major - $Obj.Major
+		} elseif ($This.Minor -ne $Obj.Minor) {
+			return $This.Minor - $Obj.Minor
+		} elseif ($This.Patch -ne $Obj.Patch) {
+			return $This.Patch - $Obj.Patch
 		} else {
-			return $this.Build - $Obj.Build
+			return $This.Build - $Obj.Build
 		}
 	}
 
 	[string] ToString() {
-		return "$($this.Major).$($this.Minor).$($this.Patch)$(if ($this.Build) {"+$($this.Build)"})"
+		return "$($This.Major).$($This.Minor).$($This.Patch)$(if ($This.Build) {"+$($This.Build)"})"
 	}
 
 }
 
 function global:Prompt {
 	if ($env:InPwrShell) {
-		Write-Host -ForegroundColor Blue -NoNewline 'pwr:'
-		Write-Host " $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1))" -NoNewline
+		Write-PwrHost -ForegroundColor Blue -NoNewline 'pwr:'
+		Write-PwrHost " $($ExecutionContext.SessionState.Path.CurrentLocation)$('>' * ($NestedPromptLevel + 1))" -NoNewline
 		return ' '
 	} else {
-		"PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) "
+		"PS $($ExecutionContext.SessionState.Path.CurrentLocation)$('>' * ($NestedPromptLevel + 1)) "
+	}
+}
+
+function Write-PwrOutput {
+	if (-not $Quiet -and -not $Silent) {
+		Write-Output @Args
+	}
+}
+
+function Write-PwrHost {
+	if (-not $Quiet -and -not $Silent) {
+		Write-Host @Args
+	}
+}
+
+function Write-PwrFatal($Message) {
+	if (-not $Silent) {
+		Write-Host -ForegroundColor Red $Message
+	}
+	exit 1
+}
+
+function Write-PwrThrow($Message) {
+	if (-not $Silent) {
+		Write-Host -ForegroundColor Red $Message
+	}
+	throw $Message
+}
+
+function Write-PwrWarning($Message) {
+	if (-not $Silent) {
+		Write-Host -ForegroundColor Yellow $Message
 	}
 }
 
 function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing) {
 	if ($Offline) {
-		Write-Error 'pwr: web request while running offline'
-	}
-	if ($PwrWebPath -and (Test-Path -Path $PwrWebPath -PathType Leaf)) {
+		Write-PwrThrow 'pwr: cannot web request while running offline'
+	} elseif ($PwrWebPath -and (Test-Path -Path $PwrWebPath -PathType Leaf)) {
 		Write-Debug "pwr: using http client $PwrWebPath"
-		$expr = "$PwrWebPath -s -L --url '$Uri'"
-		foreach ($k in $Headers.Keys) {
-			$expr += " --header '${k}: $($Headers.$k)'"
+		$Expr = "$PwrWebPath -s -L --url '$Uri'"
+		foreach ($K in $Headers.Keys) {
+			$Expr += " --header '${K}: $($Headers.$K)'"
 		}
 		if ($OutFile) {
-			$expr += " --output '$OutFile'"
+			$Expr += " --output '$OutFile'"
 		}
-		return Invoke-Expression $expr
-	} else {
-		return Invoke-WebRequest @PSBoundParameters
+		return Invoke-Expression $Expr
 	}
+	return Invoke-WebRequest @PSBoundParameters
 }
 
-function Get-StringHash($s) {
-	$stream = [IO.MemoryStream]::new([byte[]][char[]]$s)
-	return (Get-FileHash -InputStream $stream).Hash.Substring(0, 12)
+function Get-StringHash($S) {
+	$Stream = [IO.MemoryStream]::new([byte[]][char[]]$S)
+	return (Get-FileHash -InputStream $Stream).Hash.Substring(0, 12)
 }
 
 function ConvertTo-HashTable {
@@ -181,193 +217,195 @@ function ConvertTo-HashTable {
 	return $Table
 }
 
-function Get-DockerToken($repo) {
-	$resp = Invoke-PwrWebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($repo.scope):pull"
-	return ($resp | ConvertFrom-Json).token
+function Get-DockerToken($Repo) {
+	$Resp = Invoke-PwrWebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($Repo.scope):pull"
+	return ($Resp | ConvertFrom-Json).token
 }
 
-function Get-ImageManifest($pkg) {
-	$headers = @{'Accept' = 'application/vnd.docker.distribution.manifest.v2+json'}
-	if ($pkg.repo.Headers.Authorization) {
-		$headers.Authorization = $pkg.repo.Headers.Authorization
-	} elseif ($pkg.repo.IsDocker) {
-		$headers.Authorization = "Bearer $(Get-DockerToken $pkg.repo)"
+function Get-ImageManifest($Pkg) {
+	$Headers = @{'Accept' = 'application/vnd.docker.distribution.manifest.v2+json'}
+	if ($Pkg.repo.Headers.Authorization) {
+		$Headers.Authorization = $Pkg.repo.Headers.Authorization
+	} elseif ($Pkg.repo.IsDocker) {
+		$Headers.Authorization = "Bearer $(Get-DockerToken $Pkg.repo)"
 	}
-	$resp = Invoke-PwrWebRequest "$($pkg.repo.uri)/manifests/$($pkg.tag)" -Headers $headers -UseBasicParsing
-	return [string]$resp | ConvertFrom-Json
+	$Resp = Invoke-PwrWebRequest "$($Pkg.repo.uri)/manifests/$($Pkg.tag)" -Headers $Headers -UseBasicParsing
+	return [string]$Resp | ConvertFrom-Json
 }
 
-function Invoke-PullImageLayer($out, $repo, $digest) {
-	$tmp = "$env:temp/$($digest.Replace(':', '_')).tgz"
-	if (-not ((Test-Path -Path $tmp -PathType Leaf) -and (Get-FileHash -Path $tmp -Algorithm SHA256).Hash -eq $digest.Replace('sha256:', ''))) {
-		$headers = @{}
-		if ($repo.Headers.Authorization) {
-			$headers.Authorization = $repo.Headers.Authorization
-		} elseif ($repo.IsDocker) {
-			$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
+function Invoke-PullImageLayer($Out, $Repo, $Digest) {
+	$Tmp = "$env:Temp/$($Digest.Replace(':', '_')).tgz"
+	if (-not ((Test-Path -Path $Tmp -PathType Leaf) -and (Get-FileHash -Path $Tmp -Algorithm SHA256).Hash -eq $Digest.Replace('sha256:', ''))) {
+		$Headers = @{}
+		if ($Repo.Headers.Authorization) {
+			$Headers.Authorization = $Repo.Headers.Authorization
+		} elseif ($Repo.IsDocker) {
+			$Headers.Authorization = "Bearer $(Get-DockerToken $Repo)"
 		}
-		Invoke-PwrWebRequest "$($repo.uri)/blobs/$digest" -OutFile $tmp -Headers $headers
+		Invoke-PwrWebRequest "$($Repo.uri)/blobs/$Digest" -OutFile $Tmp -Headers $Headers
 	} else {
-		Write-Host 'using cache ... ' -NoNewline
+		Write-PwrHost 'using cache ... ' -NoNewline
 	}
-	& 'C:\WINDOWS\system32\tar.exe' -xzf $tmp -C $out --exclude 'Hives/*' --strip-components 1
-	Remove-Item $tmp
+	& 'C:\WINDOWS\system32\tar.exe' -xzf $Tmp -C $Out --exclude 'Hives/*' --strip-components 1
+	Remove-Item $Tmp
 }
 
-function Get-RepoTags($repo) {
-	$headers = @{}
-	if ($repo.Headers.Authorization) {
-		$headers.Authorization = $repo.Headers.Authorization
-	} elseif ($repo.IsDocker) {
-		$headers.Authorization = "Bearer $(Get-DockerToken $repo)"
+function Get-RepoTags($Repo) {
+	$Headers = @{}
+	if ($Repo.Headers.Authorization) {
+		$Headers.Authorization = $Repo.Headers.Authorization
+	} elseif ($Repo.IsDocker) {
+		$Headers.Authorization = "Bearer $(Get-DockerToken $Repo)"
 	}
-	$resp = Invoke-PwrWebRequest "$($repo.uri)/tags/list" -Headers $headers -UseBasicParsing
-	return [string]$resp | ConvertFrom-Json
+	$Resp = Invoke-PwrWebRequest "$($Repo.uri)/tags/list" -Headers $Headers -UseBasicParsing
+	return [string]$Resp | ConvertFrom-Json
 }
 
-function Resolve-PwrPackge($pkg) {
-	if ($pkg.Local) {
-		return $pkg.Path
+function Resolve-PwrPackge($Pkg) {
+	if ($Pkg.Local) {
+		return $Pkg.Path
 	} else {
-		return "$PwrPkgPath\$($pkg.tag)"
+		return "$PwrPkgPath\$($Pkg.tag)"
 	}
 }
 
-function Split-PwrPackage($pkg) {
-	if ($pkg.StartsWith('file:///')) {
-		$split = $pkg.Split('<')
-		$uri = $split[0].trim()
+function Split-PwrPackage($Pkg) {
+	if ($Pkg.StartsWith('file:///')) {
+		$Split = $Pkg.Split('<')
+		$Uri = $Split[0].trim()
 		return @{
-			Name   = $uri
-			Ref    = $uri
+			Name   = $Uri
+			Ref    = $Uri
 			Local  = $true
-			Path   = (Resolve-Path $uri.Substring(8)).Path
-			Config = if ($split[1]) { $split[1].trim() } else { 'default' }
+			Path   = (Resolve-Path $Uri.Substring(8)).Path
+			Config = if ($Split[1]) { $Split[1].trim() } else { 'default' }
 		}
 	}
-	$split = $pkg.Split(':')
-	$props = @{
-		Name    = $split[0]
+	$Split = $Pkg.Split(':')
+	$Props = @{
+		Name    = $Split[0]
 		Version = 'latest'
 		Config  = 'default'
 	}
-	if ($split.count -ge 2 -and ($split[1] -ne '')) {
-		$props.Version = $split[1]
+	if ($Split.count -ge 2 -and ($Split[1] -ne '')) {
+		$Props.Version = $Split[1]
 	}
-	if ($split.count -ge 3 -and ($split[2] -ne '')) {
-		$props.Config = $split[2]
+	if ($Split.count -ge 3 -and ($Split[2] -ne '')) {
+		$Props.Config = $Split[2]
 	}
-	return $props;
+	return $Props;
 }
 
-function Get-LatestVersion($pkgs, $matcher) {
-	$latest = $null
-	foreach ($v in $pkgs) {
-		$ver = [SemanticVersion]::new($v, '([0-9]+)\.([0-9]+)\.([0-9]+)')
-		if (($null -eq $latest) -or ($ver.LaterThan($latest))) {
-			if ($matcher -and ($v -notmatch $matcher)) {
+function Get-LatestVersion($Pkgs, $Matcher) {
+	$Latest = $null
+	foreach ($V in $Pkgs) {
+		$Ver = [SemanticVersion]::new($V, '([0-9]+)\.([0-9]+)\.([0-9]+)')
+		if (($null -eq $Latest) -or ($Ver.LaterThan($Latest))) {
+			if ($Matcher -and ($V -notmatch $Matcher)) {
 				continue
 			}
-			$latest = $ver
+			$Latest = $Ver
 		}
 	}
-	if (-not $latest) {
-		Write-Error "pwr: no package named $name$(if ($matcher) { " matching $matcher"} else { '' })"
+	if (-not $Latest) {
+		Write-PwrFatal "pwr: no package named $Name$(if ($Matcher) { " matching $Matcher"} else { '' })"
 	}
-	return $latest.ToString()
+	return $Latest.ToString()
 }
 
-function Assert-PwrPackage($pkg) {
-	$p = Split-PwrPackage $pkg
-	if ($p.Local) {
-		return $p
+function Assert-PwrPackage($Pkg) {
+	$P = Split-PwrPackage $Pkg
+	if ($P.Local) {
+		return $P
 	}
-	$name = $p.name
-	$version = $p.version
+	$Name = $P.name
+	$Version = $P.version
 	foreach ($Repo in $PwrRepositories) {
-		if (-not $Repo.Packages.$name) {
+		if (-not $Repo.Packages.$Name) {
 			continue
-		} elseif ($version -eq 'latest') {
-			$latest = Get-LatestVersion $Repo.Packages.$name
-			$p.Tag = "$name-$latest"
-			$p.Version = $latest
-		} elseif ($version -match '^([0-9]+\.){2}[0-9]+$' -and ($version -in $Repo.Packages.$name)) {
-			$p.Tag = "$name-$version"
-		} elseif ($version -match '^[0-9]+(\.[0-9]+)?$') {
-			$latest = Get-LatestVersion $Repo.Packages.$name $version
-			$p.Tag = "$name-$latest"
-			$p.Version = $latest
+		} elseif ($Version -eq 'latest') {
+			$Latest = Get-LatestVersion $Repo.Packages.$Name
+			$P.Tag = "$Name-$Latest"
+			$P.Version = $Latest
+		} elseif ($Version -match '^([0-9]+\.){2}[0-9]+$' -and ($Version -in $Repo.Packages.$Name)) {
+			$P.Tag = "$Name-$Version"
+		} elseif ($Version -match '^[0-9]+(\.[0-9]+)?$') {
+			$Latest = Get-LatestVersion $Repo.Packages.$Name $Version
+			$P.Tag = "$Name-$Latest"
+			$P.Version = $Latest
 		}
-		if ($p.Tag) {
-			$p.Repo = $Repo
-			$p.Ref = "$($p.name):$($p.version)"
-			return $p
+		if ($P.Tag) {
+			$P.Repo = $Repo
+			$P.Ref = "$($P.name):$($P.version)"
+			return $P
 		}
 	}
-	if (-not $Fetch) {
+	if (-not $Offline -and -not $Fetch) {
 		$script:Fetch = $true
 		Get-PwrPackages
-		return Assert-PwrPackage $pkg
+		return Assert-PwrPackage $Pkg
 	}
-	Write-Error "pwr: no package for ${name}:$version"
+	Write-PwrFatal "pwr: no package for ${Name}:$Version"
 }
 
 function Compare-PwrTags {
 	$Cache = "$PwrPath\cache\PwrTags"
-	$exists = Test-Path $Cache
-	if ($exists) {
+	$CacheExists = Test-Path $Cache
+	if ($CacheExists) {
 		$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
 		$OutOfDate = [DateTime]::Compare((Get-Date), $LastWrite + (New-TimeSpan -Days 1)) -gt 0
 	}
-	if ((-not $Offline) -and (-not $exists -or $OutOfDate -or $Fetch)) {
+	if ((-not $Offline) -and (-not $CacheExists -or $OutOfDate -or $Fetch)) {
 		try {
-			$req = Invoke-PwrWebRequest -Uri 'https://api.github.com/repos/airpwr/airpwr/tags' -UseBasicParsing
+			$Req = Invoke-PwrWebRequest -Uri 'https://api.github.com/repos/airpwr/airpwr/tags' -UseBasicParsing
 			mkdir (Split-Path $Cache -Parent) -Force | Out-Null
-			[IO.File]::WriteAllText($Cache, $req)
+			[IO.File]::WriteAllText($Cache, $Req)
 		} catch { }
 	}
-	$tags = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
-	$latest = [SemanticVersion]::new()
-	foreach ($tag in $tags) {
-		$ver = [SemanticVersion]::new($tag.name.Substring(1))
-		if ($ver.LaterThan($latest)) {
-			$latest = $ver
+	$Tags = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+	$Latest = [SemanticVersion]::new()
+	foreach ($Tag in $Tags) {
+		$Ver = [SemanticVersion]::new($Tag.name.Substring(1))
+		if ($Ver.LaterThan($Latest)) {
+			$Latest = $Ver
 		}
 	}
-	if ($latest.LaterThan([SemanticVersion]::new($env:PwrVersion))) {
-		Write-Host -ForegroundColor Green "pwr: a new version ($latest) is available!"
+	if ($Latest.LaterThan([SemanticVersion]::new($env:PwrVersion))) {
+		Write-PwrHost -ForegroundColor Green "pwr: a new version ($Latest) is available!"
 	}
 }
 
 function Get-PwrPackages {
 	foreach ($Repo in $PwrRepositories) {
-		$Cache = "$PwrPath\cache\$($repo.hash)"
-		$exists = Test-Path $Cache
-		if ($exists) {
+		$Cache = "$PwrPath\cache\$($Repo.hash)"
+		$CacheExists = Test-Path $Cache
+		if ($CacheExists) {
 			$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
 			$OutOfDate = [DateTime]::Compare((Get-Date), $LastWrite + (New-TimeSpan -Days 1)) -gt 0
 		}
-		if ((-not $Offline) -and (-not $exists -or $OutOfDate -or $Fetch)) {
+		if ($Offline) {
+			Write-PwrOutput 'pwr: skipping fetch tags while running offline'
+		} elseif (-not $CacheExists -or $OutOfDate -or $Fetch) {
 			try {
-				Write-Output "pwr: fetching tags from $($repo.uri)"
-				$tagList = Get-RepoTags $Repo
-				$pkgs = @{}
-				$names = @{}
-				foreach ($tag in $tagList.tags) {
-					if ($tag -match '(.+)-([0-9].+)') {
-						$pkg = $Matches[1]
-						$ver = $Matches[2]
-						$names.$pkg = $null
-						$pkgs.$pkg = @($pkgs.$pkg) + @([SemanticVersion]::new($ver)) | Sort-Object
+				Write-PwrOutput "pwr: fetching tags from $($Repo.uri)"
+				$TagList = Get-RepoTags $Repo
+				$Pkgs = @{}
+				$Names = @{}
+				foreach ($Tag in $TagList.tags) {
+					if ($Tag -match '(.+)-([0-9].+)') {
+						$Pkg = $Matches[1]
+						$Ver = $Matches[2]
+						$Names.$Pkg = $null
+						$Pkgs.$Pkg = @($Pkgs.$Pkg) + @([SemanticVersion]::new($Ver)) | Sort-Object
 					}
 				}
-				foreach ($name in $names.keys) {
-					$pkgs.$name = $pkgs.$name | ForEach-Object { $_.ToString() }
+				foreach ($Name in $Names.keys) {
+					$Pkgs.$Name = $Pkgs.$Name | ForEach-Object { $_.ToString() }
 				}
 				mkdir (Split-Path $Cache -Parent) -Force | Out-Null
-				[IO.File]::WriteAllText($Cache, (ConvertTo-Json $pkgs -Depth 50 -Compress))
+				[IO.File]::WriteAllText($Cache, (ConvertTo-Json $Pkgs -Depth 50 -Compress))
 			} catch {
-				Write-Host -ForegroundColor Red "pwr: failed to fetch tags from $($repo.uri)"
+				Write-PwrHost -ForegroundColor Red "pwr: failed to fetch tags from $($Repo.uri)"
 				Write-Debug "    > $($Error[0])"
 			}
 		}
@@ -376,54 +414,59 @@ function Get-PwrPackages {
 
 }
 
-function Test-PwrPackage($pkg) {
-	$PkgPath = Resolve-PwrPackge $pkg
+function Test-PwrPackage($Pkg) {
+	$PkgPath = Resolve-PwrPackge $Pkg
 	return Test-Path "$PkgPath\.pwr"
 }
 
-function Invoke-PwrPackagePull($pkg) {
-	if (Test-PwrPackage $pkg) {
-		Write-Output "pwr: $($pkg.ref) already exists"
+function Invoke-PwrPackagePull($Pkg) {
+	if (Test-PwrPackage $Pkg) {
+		Write-PwrOutput "pwr: $($Pkg.ref) already exists"
+	} elseif ($Offline) {
+		Write-PwrFatal "pwr: cannot fetch $($Pkg.ref) while running offline"
 	} else {
-		Write-Host "pwr: fetching $($pkg.ref) ... " -NoNewline
-		$manifest = Get-ImageManifest $pkg
-		$PkgPath = Resolve-PwrPackge $pkg
+		Write-PwrHost "pwr: fetching $($Pkg.ref) ... " -NoNewline
+		$Manifest = Get-ImageManifest $Pkg
+		$PkgPath = Resolve-PwrPackge $Pkg
 		mkdir $PkgPath -Force | Out-Null
-		foreach ($layer in $manifest.layers) {
-			if ($layer.mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
-				Invoke-PullImageLayer $PkgPath $pkg.repo $layer.digest
+		foreach ($Layer in $Manifest.layers) {
+			if ($Layer.mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
+				Invoke-PullImageLayer $PkgPath $Pkg.repo $Layer.digest
 			}
 		}
-		Write-Host 'done.'
+		Write-PwrHost 'done.'
 	}
 }
 
-function Invoke-PwrPackageShell($pkg) {
-	$PkgPath = Resolve-PwrPackge $pkg
-	$vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-HashTable
-	if ($pkg.config -eq 'default') {
-		$pkgvar = $vars
-	} else {
-		if (-not $vars."$($pkg.config)") {
-			Write-Error "pwr: no such configuration '$($pkg.config)' for $($pkg.ref)"
-		}
-		$pkgvar = $vars."$($pkg.config)"
+function Invoke-PwrPackageShell($Pkg) {
+	$PkgPath = Resolve-PwrPackge $Pkg
+	if ($Offline -and -not (Test-PwrPackage $Pkg)) {
+		Write-PwrThrow "pwr: cannot resolve package $($Pkg.ref) while running offline"
 	}
-	Format-Table $pkgenv
+	$Vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-HashTable
+	if ($Pkg.config -eq 'default') {
+		$PkgVar = $Vars
+	} else {
+		if (-not $Vars."$($Pkg.config)") {
+			Write-PwrThrow "pwr: no such configuration '$($Pkg.config)' for $($Pkg.ref)"
+		}
+		$PkgVar = $Vars."$($Pkg.config)"
+	}
+	Format-Table $PkgEnv
 	# Vars
-	foreach ($k in $pkgvar.var.keys) {
-		Set-Variable -Name $k -Value $pkgvar.var.$k -Scope 'global'
+	foreach ($K in $PkgVar.var.keys) {
+		Set-Variable -Name $K -Value $PkgVar.var.$K -Scope 'global'
 	}
 	# Env
-	foreach ($k in $pkgvar.env.keys) {
-		$prefix = ''
-		if ($k -eq 'path') {
-			$prefix += "${env:path};"
+	foreach ($K in $PkgVar.env.keys) {
+		$Prefix = ''
+		if ($K -eq 'path') {
+			$Prefix += "${env:Path};"
 		}
-		Set-Item "env:$k" "$prefix$($pkgvar.env.$k)"
+		Set-Item "env:$K" "$Prefix$($PkgVar.env.$K)"
 	}
-	$item = Get-ChildItem -Path "$PkgPath\.pwr"
-	$item.LastAccessTime = (Get-Date)
+	$Item = Get-ChildItem -Path "$PkgPath\.pwr"
+	$Item.LastAccessTime = (Get-Date)
 }
 
 function Assert-NonEmptyPwrPackages {
@@ -433,78 +476,78 @@ function Assert-NonEmptyPwrPackages {
 		}
 	}
 	if ($Packages.Count -eq 0) {
-		Write-Error 'pwr: no packages provided'
+		Write-PwrFatal 'pwr: no packages provided'
 	}
 }
 
 function Get-PwrRepositories {
-	$rs = if ($Repositories) { $Repositories } elseif ($PwrConfig.Repositories) { $PwrConfig.Repositories } else { , 'airpower/shipyard' }
-	$repos = @()
-	foreach ($repo in $rs) {
-		$uri = $repo
-		$headers = @{}
-		if (-not $uri.Contains('/v2/')) {
-			$uri = "index.docker.io/v2/$uri"
+	$Rs = if ($Repositories) { $Repositories } elseif ($PwrConfig.Repositories) { $PwrConfig.Repositories } else { , 'airpower/shipyard' }
+	$Repos = @()
+	foreach ($Repo in $Rs) {
+		$Uri = $Repo
+		$Headers = @{}
+		if (-not $Uri.Contains('/v2/')) {
+			$Uri = "index.docker.io/v2/$Uri"
 		}
-		if (-not $uri.StartsWith('http')) {
-			$uri = "https://$uri"
+		if (-not $Uri.StartsWith('http')) {
+			$Uri = "https://$Uri"
 		}
-		foreach ($auth in $PwrAuths.keys) {
-			$authUri = if (-not $auth.StartsWith('http')) { "https://$auth" } else { $auth }
-			if ($uri.StartsWith($authUri)) {
-				if ($PwrAuths.$auth.basic) {
-					$headers.Authorization = "Basic $($PwrAuths.$auth.basic)"
+		foreach ($Auth in $PwrAuths.keys) {
+			$AuthUri = if (-not $Auth.StartsWith('http')) { "https://$Auth" } else { $Auth }
+			if ($Uri.StartsWith($AuthUri)) {
+				if ($PwrAuths.$Auth.basic) {
+					$Headers.Authorization = "Basic $($PwrAuths.$Auth.basic)"
 					break
 				}
 			}
 		}
 		$Repository = @{
-			URI   = $uri
-			Scope = $uri.Substring($uri.IndexOf('/v2/') + 4)
-			Hash  = Get-StringHash $uri
+			URI   = $Uri
+			Scope = $Uri.Substring($Uri.IndexOf('/v2/') + 4)
+			Hash  = Get-StringHash $Uri
 		}
-		if ($headers.count -gt 0) {
-			$Repository.Headers = $headers
+		if ($Headers.count -gt 0) {
+			$Repository.Headers = $Headers
 		}
-		if ($uri.StartsWith('https://index.docker.io/v2/')) {
+		if ($Uri.StartsWith('https://index.docker.io/v2/')) {
 			$Repository.IsDocker = $true
 		}
-		$repos += , $Repository
+		$Repos += , $Repository
 	}
-	return $repos
+	return $Repos
 }
 
 function Save-PSSessionState {
 	Write-Debug 'pwr: saving state'
-	$vars = @()
-	foreach ($v in (Get-Variable)) {
-		$vars += , @{
-			Name  = $v.Name
-			Value = $v.Value
+	$Vars = @()
+	foreach ($V in (Get-Variable)) {
+		$Vars += , @{
+			Name  = $V.Name
+			Value = $V.Value
 		}
 	}
-	$evars = @()
-	foreach ($v in (Get-Item env:*)) {
-		$evars += , @{
-			Name  = $v.Name
-			Value = $v.Value
+	$EnvVars = @()
+	foreach ($V in (Get-Item env:*)) {
+		$EnvVars += , @{
+			Name  = $V.Name
+			Value = $V.Value
 		}
 	}
 	Set-Variable -Name PwrSaveState -Value @{
-		Vars = $vars
-		Env  = $evars
+		Vars = $Vars
+		Env  = $EnvVars
 	} -Scope 'global'
 }
 
 function Restore-PSSessionState {
 	Write-Debug 'pwr: restoring state'
-	$state = (Get-Variable 'PwrSaveState' -Scope 'global').Value
-	foreach ($v in $state.vars) {
-		Set-Variable -Name "$($v.Name)" -Value $v.Value -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+	$State = (Get-Variable 'PwrSaveState' -Scope 'global').Value
+	foreach ($V in $State.vars) {
+		Set-Variable -Name "$($V.Name)" -Value $V.Value -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
 	}
 	Remove-Item -Path 'env:*' -Force -ErrorAction 'SilentlyContinue'
-	foreach ($e in $state.env) {
-		Set-Item -Path "env:$($e.Name)" -Value $e.Value -Force -ErrorAction 'SilentlyContinue'
+	foreach ($E in $State.env) {
+		Set-Item -Path "env:$($E.Name)" -Value $E.Value -Force -ErrorAction 'SilentlyContinue'
 	}
 	Set-Variable -Name PwrSaveState -Value $null -Scope 'Global'
 }
@@ -512,48 +555,48 @@ function Restore-PSSessionState {
 function Clear-PSSessionState {
 	Write-Debug 'pwr: clearing state'
 	$DefaultVariableNames = '$', '?', '^', 'args', 'ConfirmPreference', 'ConsoleFileName', 'DebugPreference', 'Error', 'ErrorActionPreference', 'ErrorView', 'ExecutionContext', 'false', 'FormatEnumerationLimit', 'HOME', 'Host', 'InformationPreference', 'input', 'MaximumAliasCount', 'MaximumDriveCount', 'MaximumErrorCount', 'MaximumFunctionCount', 'MaximumHistoryCount', 'MaximumVariableCount', 'MyInvocation', 'NestedPromptLevel', 'null', 'OutputEncoding', 'PID', 'PROFILE', 'ProgressPreference', 'PSBoundParameters', 'PSCommandPath', 'PSCulture', 'PSDefaultParameterValues', 'PSEdition', 'PSEmailServer', 'PSHOME', 'PSScriptRoot', 'PSSessionApplicationName', 'PSSessionConfigurationName', 'PSSessionOption', 'PSUICulture', 'PSVersionTable', 'PWD', 'ShellId', 'StackTrace', 'true', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference', 'PwrSaveState'
-	$vars = Get-Variable -Scope 'global'
-	foreach ($var in $vars) {
-		if ($var.Name -notin $DefaultVariableNames) {
-			Remove-Variable -Name "$($var.Name)" -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+	$Vars = Get-Variable -Scope 'global'
+	foreach ($Var in $Vars) {
+		if ($Var.Name -notin $DefaultVariableNames) {
+			Remove-Variable -Name "$($Var.Name)" -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
 		}
 	}
-	foreach ($key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
-		if ($key -notin 'temp', 'tmp', 'pwrhome', 'pwrwebpath') {
-			Remove-Item "env:$key" -Force -ErrorAction SilentlyContinue
+	foreach ($Key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
+		if ($Key -notin 'temp', 'tmp', 'pwrhome') {
+			Remove-Item "env:$Key" -Force -ErrorAction SilentlyContinue
 		}
 	}
 	Remove-Item 'env:PwrLoadedPackages' -Force -ErrorAction SilentlyContinue
 }
 
-function Remove-Directory($dir) {
-	$wh = "${dir}_wh_"
+function Remove-Directory($Dir) {
+	$Wh = "${Dir}_wh_"
 	try {
-		Move-Item $dir -Destination $wh
+		Move-Item $Dir -Destination $Wh
 	} catch {
-		Write-Error "pwr: cannot remove $dir because it is being used by another process"
+		Write-PwrFatal "pwr: cannot remove $Dir because it is being used by another process"
 	}
-	$name = [IO.Path]::GetRandomFileName()
-	$empty = "$env:Temp\$name"
-	mkdir $empty | Out-Null
+	$Name = [IO.Path]::GetRandomFileName()
+	$Empty = "$env:Temp\$Name"
+	mkdir $Empty | Out-Null
 	try {
-		robocopy $empty $wh /purge /MT | Out-Null
-		Remove-Item $wh
+		robocopy $Empty $Wh /purge /MT | Out-Null
+		Remove-Item $Wh
 	} finally {
-		Remove-Item $empty
+		Remove-Item $Empty
 	}
 }
 
 function Get-InstalledPwrPackages {
-	$pkgs = @{}
+	$Pkgs = @{}
 	Get-ChildItem -Path $PwrPkgPath | ForEach-Object {
 		if ($_.Name -match '(.+)-([0-9].+)') {
-			$pkg = $Matches[1]
-			$ver = $Matches[2]
-			$pkgs.$pkg += , $ver
+			$Pkg = $Matches[1]
+			$Ver = $Matches[2]
+			$Pkgs.$Pkg += , $Ver
 		}
 	}
-	return $pkgs
+	return $Pkgs
 }
 
 function Resolve-PwrPackageOverrides {
@@ -561,37 +604,37 @@ function Resolve-PwrPackageOverrides {
 		return
 	}
 	if (-not $PwrConfig) {
-		Write-Error 'pwr: no configuration found to override'
+		Write-PwrFatal 'pwr: no configuration found to override'
 	}
 	$PkgOverride = @{}
-	foreach ($p in $Packages) {
-		$pkg = Split-PwrPackage $p
-		$PkgOverride.$($pkg.name) = $pkg
+	foreach ($P in $Packages) {
+		$Pkg = Split-PwrPackage $P
+		$PkgOverride.$($Pkg.name) = $Pkg
 	}
-	$pkgs = @()
-	foreach ($p in $PwrConfig.Packages) {
-		$split = Split-PwrPackage $p
-		$pkg = $PkgOverride.$($split.name)
-		if ($pkg) {
-			if ($pkg.local) {
-				Write-Error "pwr: tried to override local package $p"
+	$Pkgs = @()
+	foreach ($P in $PwrConfig.Packages) {
+		$Split = Split-PwrPackage $P
+		$Pkg = $PkgOverride.$($Split.name)
+		if ($Pkg) {
+			if ($Pkg.local) {
+				Write-PwrFatal "pwr: tried to override local package $P"
 			}
-			$over = "$($pkg.name):$($pkg.version):$($pkg.config)"
-			Write-Debug "pwr: overriding $p with $over"
-			$pkgs += $over
-			$PkgOverride.Remove($pkg.name)
+			$Over = "$($Pkg.name):$($Pkg.version):$($Pkg.config)"
+			Write-Debug "pwr: overriding $P with $Over"
+			$Pkgs += $Over
+			$PkgOverride.Remove($Pkg.name)
 		} else {
-			$pkgs += $p
+			$Pkgs += $P
 		}
 	}
-	foreach ($key in $PkgOverride.keys) {
-		if ($PkgOverride.$key.local) {
-			Write-Error "pwr: tried to override local package $key"
+	foreach ($Key in $PkgOverride.keys) {
+		if ($PkgOverride.$Key.local) {
+			Write-PwrFatal "pwr: tried to override local package $Key"
 		} else {
-			Write-Error "pwr: cannot override absent package ${key}:$($PkgOverride.$key.version)"
+			Write-PwrFatal "pwr: cannot override absent package ${Key}:$($PkgOverride.$Key.version)"
 		}
 	}
-	[string[]]$script:Packages = $pkgs
+	[string[]]$script:Packages = $Pkgs
 }
 
 function Invoke-PwrScripts {
@@ -602,7 +645,7 @@ function Invoke-PwrScripts {
 		if ($PwrConfig.Scripts.$Name) {
 			try {
 				& $PSCommandPath shell
-			} catch {}
+			} catch { }
 			try {
 				if ($PwrConfig.Scripts."pre$Name") {
 					Invoke-Expression $PwrConfig.Scripts."pre$Name"
@@ -617,19 +660,19 @@ function Invoke-PwrScripts {
 				}
 			}
 		} else {
-			Write-Error "pwr: no declared script '$Run'"
+			Write-PwrFatal "pwr: no declared script '$Run'"
 		}
 	} else {
-		Write-Error 'pwr: no pwr.json scripts declared'
+		Write-PwrFatal 'pwr: no pwr.json scripts declared'
 	}
 }
 
 $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
-$PwrWebPath = if ($env:PwrWebPath) { $env:PwrWebPath } else { 'C:\Windows\System32\curl.exe' }
+$PwrWebPath = 'C:\Windows\System32\curl.exe'
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.18'
+$env:PwrVersion = '0.4.19'
 Compare-PwrTags
 
 if (-not $Run) {
@@ -639,10 +682,10 @@ if (-not $Run) {
 				$local:CurVer = [SemanticVersion]::new([string]"$env:PwrVersion")
 				$local:MinVer = [SemanticVersion]::new([string]"$AssertMinimum")
 				if ($CurVer.CompareTo($MinVer) -lt 0) {
-					Write-Error "$env:PwrVersion does not meet the minimum version $AssertMinimum"
+					Write-PwrFatal "$env:PwrVersion does not meet the minimum version $AssertMinimum"
 				}
 			} else {
-				Write-Output "pwr: version $env:PwrVersion"
+				Write-PwrOutput "pwr: version $env:PwrVersion"
 			}
 			exit
 		}
@@ -651,20 +694,24 @@ if (-not $Run) {
 			exit
 		}
 		'update' {
-			$PwrCmd = "$PwrPath\cmd"
-			mkdir $PwrCmd -Force | Out-Null
-			Invoke-PwrWebRequest -UseBasicParsing 'https://api.github.com/repos/airpwr/airpwr/contents/src/pwr.ps1' | ConvertFrom-Json | ForEach-Object {
-				$content = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_.Content))
-				[IO.File]::WriteAllText("$PwrCmd\pwr.ps1", $content)
+			if ($Offline) {
+				Write-PwrFatal 'pwr: cannot update while running offline'
+			} else {
+				$PwrCmd = "$PwrPath\cmd"
+				mkdir $PwrCmd -Force | Out-Null
+				Invoke-PwrWebRequest -UseBasicParsing 'https://api.github.com/repos/airpwr/airpwr/contents/src/pwr.ps1' | ConvertFrom-Json | ForEach-Object {
+					$Content = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_.Content))
+					[IO.File]::WriteAllText("$PwrCmd\pwr.ps1", $Content)
+				}
+				$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+				if (-not $UserPath.Contains($PwrCmd)) {
+					[Environment]::SetEnvironmentVariable('Path', "$UserPath;$PwrCmd", 'User')
+				}
+				if (-not ${env:Path}.Contains($PwrCmd)) {
+					$env:Path = "$env:Path;$PwrCmd"
+				}
+				& "$PwrCmd\pwr.ps1" version
 			}
-			$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-			if (-not $UserPath.Contains($PwrCmd)) {
-				[Environment]::SetEnvironmentVariable('Path', "$UserPath;$PwrCmd", 'User')
-			}
-			if (-not ${env:Path}.Contains($PwrCmd)) {
-				$env:Path = "$env:Path;$PwrCmd"
-			}
-			& "$PwrCmd\pwr.ps1" version
 			exit
 		}
 		'exit' {
@@ -673,7 +720,7 @@ if (-not $Run) {
 				$env:InPwrShell = $null
 				Write-Debug 'pwr: shell session closed'
 			} else {
-				Write-Error 'pwr: no shell session is in progress'
+				Write-PwrFatal 'pwr: no shell session is in progress'
 			}
 			exit
 		}
@@ -696,12 +743,12 @@ if ($Run) {
 switch ($Command) {
 	'fetch' {
 		Assert-NonEmptyPwrPackages
-		foreach ($p in $Packages) {
-			$pkg = Assert-PwrPackage $p
-			if ($pkg.Local) {
-				Write-Error "pwr: tried to fetch local package $($pkg.ref)"
+		foreach ($P in $Packages) {
+			$Pkg = Assert-PwrPackage $P
+			if ($Pkg.Local) {
+				Write-PwrFatal "pwr: tried to fetch local package $($Pkg.ref)"
 			}
-			Invoke-PwrPackagePull $pkg
+			Invoke-PwrPackagePull $Pkg
 		}
 	}
 	'load' {
@@ -709,77 +756,77 @@ switch ($Command) {
 		$_Path = $env:Path
 		Clear-Item env:Path
 		try {
-			foreach ($p in $Packages) {
-				$pkg = Assert-PwrPackage $p
-				if (!(Test-PwrPackage $pkg)) {
-					Invoke-PwrPackagePull $pkg
+			foreach ($P in $Packages) {
+				$Pkg = Assert-PwrPackage $P
+				if (-not (Test-PwrPackage $Pkg)) {
+					Invoke-PwrPackagePull $Pkg
 				}
-				if (-not "$env:PwrLoadedPackages".Contains($pkg.ref)) {
-					Invoke-PwrPackageShell $pkg
-					$env:PwrLoadedPackages = "$($pkg.ref) $env:PwrLoadedPackages"
-					Write-Host -ForegroundColor Blue 'pwr:' -NoNewline
-					Write-Host " loaded $($pkg.ref)"
-				} else {
-					Write-Output "pwr: $($pkg.ref) already loaded"
+				if (-not "$env:PwrLoadedPackages".Contains($Pkg.ref)) {
+					Invoke-PwrPackageShell $Pkg
+					$env:PwrLoadedPackages = "$($Pkg.ref) $env:PwrLoadedPackages"
+					Write-PwrHost -ForegroundColor Blue 'pwr:' -NoNewline
+					Write-PwrHost " loaded $($Pkg.ref)"
+				} elseif (Test-PwrPackage $Pkg) {
+					Write-PwrOutput "pwr: $($Pkg.ref) already loaded"
 				}
 			}
-		} finally {
 			$env:Path = "$env:Path;$_Path"
+		} catch {
+			$env:Path = $_Path
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
 		Assert-NonEmptyPwrPackages
-		$pkgs = @()
-		foreach ($p in $Packages) {
-			$pkg = Assert-PwrPackage $p
-			if (!(Test-PwrPackage $pkg)) {
-				Invoke-PwrPackagePull $pkg
+		$Pkgs = @()
+		foreach ($P in $Packages) {
+			$Pkg = Assert-PwrPackage $P
+			if (-not (Test-PwrPackage $Pkg)) {
+				Invoke-PwrPackagePull $Pkg
 			}
-			$pkgs += , $pkg
+			$Pkgs += , $Pkg
 		}
 		if (-not $env:InPwrShell) {
 			Save-PSSessionState
 			$env:InPwrShell = $true
 		} else {
-			Write-Error "pwr: cannot start a new shell session while one is in progress; use `pwr exit` to end the existing session"
-			break
+			Write-PwrFatal "pwr: cannot start a new shell session while one is in progress; use `pwr exit` to end the existing session"
 		}
 		Clear-PSSessionState
-		foreach ($p in $pkgs) {
+		foreach ($P in $Pkgs) {
 			try {
-				Invoke-PwrPackageShell $p
+				Invoke-PwrPackageShell $P
 			} catch {
 				Restore-PSSessionState
 				$env:InPwrShell = $null
 				throw $_
 			}
-			Write-Host -ForegroundColor Blue -NoNewline 'pwr:'
-			Write-Host " using $($p.ref)"
+			Write-PwrHost -ForegroundColor Blue -NoNewline 'pwr:'
+			Write-PwrHost " using $($P.ref)"
 		}
 		if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
-			$pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
-			$env:Path = "$env:Path;$pwr"
+			$Pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
+			$env:Path = "$env:Path;$Pwr"
 		}
 		$env:Path = "$env:Path;\windows;\windows\system32;\windows\system32\windowspowershell\v1.0"
 	}
 	'ls-config' {
-		foreach ($p in $Packages) {
-			$pkg = Assert-PwrPackage $p
-			if (!(Test-PwrPackage $pkg)) {
-				Write-Error "pwr: package $($pkg.ref) is not installed"
+		foreach ($P in $Packages) {
+			$Pkg = Assert-PwrPackage $P
+			if (-not (Test-PwrPackage $Pkg)) {
+				Write-PwrFatal "pwr: package $($Pkg.ref) is not installed"
 			}
-			$local:pkgpath = Resolve-PwrPackge $pkg
-			$local:pwrcfg = Get-Content -Raw "$local:pkgpath\.pwr" | ConvertFrom-Json | ConvertTo-HashTable
-			Write-Output "$($pkg.ref)"
-			$local:configs = @('default')
-			foreach ($local:key in $local:pwrcfg.keys) {
-				if (($local:key -eq 'env') -or ($local:key -eq 'var')) {
+			$local:PkgPath = Resolve-PwrPackge $Pkg
+			$local:PwrCfg = Get-Content -Raw "$local:PkgPath\.pwr" | ConvertFrom-Json | ConvertTo-HashTable
+			Write-PwrOutput "$($Pkg.ref)"
+			$local:Configs = @('default')
+			foreach ($local:Key in $local:PwrCfg.keys) {
+				if (($local:Key -eq 'env') -or ($local:Key -eq 'var')) {
 					continue
 				}
-				$local:configs += $local:key
+				$local:Configs += $local:Key
 			}
-			foreach ($local:config in ($local:configs | Sort-Object)) {
-				Write-Output "  $local:config"
+			foreach ($local:Config in ($local:Configs | Sort-Object)) {
+				Write-PwrOutput "  $local:Config"
 			}
 		}
 	}
@@ -790,19 +837,19 @@ switch ($Command) {
 		}
 		foreach ($Repo in $PwrRepositories) {
 			if (($Packages.count -eq 1) -and ($Packages[0] -match '[^:]+')) {
-				$pkg = $Matches[0]
-				Write-Output "pwr: $pkg[$($Repo.uri)]"
-				if ($Repo.Packages.$pkg) {
-					Write-Output $Repo.Packages.$pkg | Format-List
+				$Pkg = $Matches[0]
+				Write-PwrOutput "pwr: $Pkg[$($Repo.uri)]"
+				if ($Repo.Packages.$Pkg) {
+					Write-PwrOutput $Repo.Packages.$Pkg | Format-List
 				} else {
-					Write-Output '<none>'
+					Write-PwrOutput '<none>'
 				}
 			} else {
-				Write-Output "pwr: [$($Repo.uri)]"
+				Write-PwrOutput "pwr: [$($Repo.uri)]"
 				if ('' -ne $Repo.Packages) {
-					Write-Output $Repo.Packages | Format-List
+					Write-PwrOutput $Repo.Packages | Format-List
 				} else {
-					Write-Output '<none>'
+					Write-PwrOutput '<none>'
 				}
 			}
 		}
@@ -810,48 +857,48 @@ switch ($Command) {
 	{$_ -in 'rm', 'remove'} {
 		if ($DaysOld) {
 			if ($Packages.Count -gt 0) {
-				Write-Error 'pwr: -DaysOld not compatible with -Packages'
+				Write-PwrFatal 'pwr: -DaysOld not compatible with -Packages'
 			}
-			$pkgs = Get-InstalledPwrPackages
-			foreach ($name in $pkgs.keys) {
-				foreach ($ver in $pkgs.$name) {
-					$PkgRoot = "$PwrPkgPath\$name-$ver"
+			$Pkgs = Get-InstalledPwrPackages
+			foreach ($Name in $Pkgs.keys) {
+				foreach ($Ver in $Pkgs.$Name) {
+					$PkgRoot = "$PwrPkgPath\$Name-$Ver"
 					try {
-						$item = Get-ChildItem -Path "$PkgRoot\.pwr"
+						$Item = Get-ChildItem -Path "$PkgRoot\.pwr"
 					} catch {
-						Write-Warning "pwr: $PkgRoot is not a pwr package; it should be removed manually"
+						Write-PwrWarning "pwr: $PkgRoot is not a pwr package; it should be removed manually"
 						continue
 					}
-					$item.LastAccessTime = $item.LastAccessTime
-					$old = $item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
-					if ($old -and $PSCmdlet.ShouldProcess("${name}:$ver", 'remove pwr package')) {
-						Write-Host "pwr: removing ${name}:$ver ... " -NoNewline
+					$Item.LastAccessTime = $Item.LastAccessTime
+					$Old = $Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
+					if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
+						Write-PwrHost "pwr: removing ${Name}:$Ver ... " -NoNewline
 						Remove-Directory $PkgRoot
-						Write-Host 'done.'
+						Write-PwrHost 'done.'
 					}
 				}
 			}
 		} else {
 			Assert-NonEmptyPwrPackages
-			foreach ($p in $Packages) {
-				$pkg = Assert-PwrPackage $p
-				if ($pkg.Local) {
-					Write-Error "pwr: tried to remove local package $($pkg.ref)"
-				} elseif (Test-PwrPackage $pkg) {
-					if ($PSCmdlet.ShouldProcess($pkg.ref, 'remove pwr package')) {
-						Write-Host "pwr: removing $($pkg.ref) ... " -NoNewline
-						$path = Resolve-PwrPackge $pkg
-						Remove-Directory $path
-						Write-Host 'done.'
+			foreach ($P in $Packages) {
+				$Pkg = Assert-PwrPackage $P
+				if ($Pkg.Local) {
+					Write-PwrFatal "pwr: tried to remove local package $($Pkg.ref)"
+				} elseif (Test-PwrPackage $Pkg) {
+					if ($PSCmdlet.ShouldProcess($Pkg.ref, 'remove pwr package')) {
+						Write-PwrHost "pwr: removing $($Pkg.ref) ... " -NoNewline
+						$Path = Resolve-PwrPackge $Pkg
+						Remove-Directory $Path
+						Write-PwrHost 'done.'
 					}
 				} else {
-					Write-Output "pwr: $($pkg.ref) not found"
+					Write-PwrOutput "pwr: $($Pkg.ref) not found"
 				}
 			}
 		}
 	}
 	Default {
-		Write-Host -ForegroundColor Red "pwr: no such command '$Command'"
-		Write-Host -ForegroundColor Red "     use 'pwr help' for a list of commands"
+		Write-PwrHost -ForegroundColor Red "pwr: no such command '$Command'"
+		Write-PwrHost -ForegroundColor Red "     use 'pwr help' for a list of commands"
 	}
 }
