@@ -35,28 +35,31 @@ When a repository or registry needs authetication, `pwr` will look for an `auths
 An `auths.json` might look like:
 ```json
 {
-    "example.com/registry": {
-        "basic": "<base64 string>"
-    }
+  "example.com/registry": {
+    "basic": "<base64 string>"
+  }
 }
 ```
 
 # Configuration
 
-`pwr` can be configured entirely through the command line syntax; however, for convenience and to enable *Configuration as Code*, a local file the the current directory, named `pwr.json`, is supported.
+`pwr` can be configured entirely through the command line syntax; however, for convenience and to enable *Configuration as Code*, a file named `pwr.json` in the current or any parent directory is supported.
 
-A `pwr.json` might look like:
+`pwr.json` file's contents might look like:
 
 ```json
 {
-    "packages": [
-        "jdk:8",
-        "python"
-    ],
-    "repositories": [
-        "airpower/shipyard",
-        "example.com/registry/v2/my/repo"
-    ]
+  "packages": [
+    "jdk:8",
+    "python"
+  ],
+  "repositories": [
+    "airpower/shipyard",
+    "example.com/registry/v2/my/repo"
+  ],
+  "scripts": {
+    "name": "command"
+  }
 }
 ```
 
@@ -67,21 +70,21 @@ A `pwr.json` might look like:
 
 # Usage
 
-	SYNTAX
-	pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-DaysOld <Int32>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf] [-Confirm] [<CommonParameters>]
+SYNTAX
+	pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-DaysOld <Int32>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
 
-	PARAMETERS
-	 -Command <String>
-			list, ls		Displays all packages and their versions
-			ls-config		Displays all configurations for a package
-			fetch			Downloads packages
-			shell, sh		Configures the terminal with the listed packages and starts a session
-			exit			Ends the session and restores the previous terminal state
-			load			Loads packages into the terminal transparently to shell sessions
-			help, h			Displays syntax and descriptive information for calling pwr
-			version, v		Displays this verion of pwr
-			remove, rm		Removes package data from the local machine
-			update			Updates the pwr command to the latest version
+PARAMETERS
+	-Command <String>
+		list, ls		Displays all packages and their versions
+		ls-config		Displays all configurations for a package
+		fetch			Downloads packages
+		shell, sh		Configures the terminal with the listed packages and starts a session
+		exit			Ends the session and restores the previous terminal state
+		load			Loads packages into the terminal transparently to shell sessions
+		help, h			Displays syntax and descriptive information for calling pwr
+		version, v		Displays this verion of pwr
+		remove, rm		Removes package data from the local machine
+		update			Updates the pwr command to the latest version
 
 	-Packages <String[]>
 		A list of packages and their versions to be used in the fetch or shell command
@@ -91,12 +94,12 @@ A `pwr.json` might look like:
 		  - If the Minor or Patch is omitted, the latest available is used
 			(e.g. pkg:7 will select the latest version with Major version 7)
 		  - When the configuration is omitted, the default used
-		When this parameter is omitted, packages are read from a file named 'pwr.json' in the current working directory
+		When this parameter is omitted, packages are read from a file named 'pwr.json' in the current or any parent directories
 		  - The file must have the form { "packages": ["pkg:7", ... ] }
 
 	-Repositories <String[]>
 		A list of OCI compliant container repositories
-		When this parameter is omitted and a file named 'pwr.json' exists the current working directory, repositories are read from that file
+		When this parameter is omitted and a file named 'pwr.json' exists in the current or any parent directories, repositories are read from that file
 		  - The file must have the form { "repositories": ["example.com/v2/some/repo"] }
 		  - The registry (e.g. 'example.com/v2/') may be omitted when the registry is DockerHub
 		When this parameter is omitted and no file is present, a default repository is used
@@ -123,7 +126,7 @@ A `pwr.json` might look like:
 		Must be called with the `version` command
 
 	-Override [<SwitchParameter>]
-		Overrides `pwr.json` package versions with the versions provided by the `Packages` parameter
+		Overrides 'pwr.json' package versions with the versions provided by the `Packages` parameter
 		The package must be declared in the configuration file
 		The package must not be expressed by a file URI
 
@@ -139,7 +142,7 @@ A `pwr.json` might look like:
 
 	-Run <String>
 		Executes the user-defined script inside a shell session
-		The script is declared like { ..., "scripts": { "name": "something to run" } } in a pwr.json file
+		The script is declared like { ..., "scripts": { "name": "something to run" } } in 'pwr.json'
 		Additional arguments are passed to the script when the value of this parameter includes the delimiter "--" with subsequent text
 		Scripts support pre and post actions when accompanying keys "pre<name>" or "post<name>" exist
 
@@ -147,7 +150,7 @@ A `pwr.json` might look like:
 
 Configuring a development shell
 
-	pwr shell java, gradle, python
+	pwr shell jdk:8, gradle, python
 
 Listing available packages
 
