@@ -24,11 +24,11 @@
 	  - If the Minor or Patch is omitted, the latest available is used
 		(e.g. pkg:7 will select the latest version with Major version 7)
 	  - When the configuration is omitted, the default used
-	When this parameter is omitted, packages are read from a file named 'pwr.json' in the current working directory
+	When this parameter is omitted, packages are read from a file named 'pwr.json' in the current or any parent directories
 	  - The file must have the form { "packages": ["pkg:7", ... ] }
 .PARAMETER Repositories
 	A list of OCI compliant container repositories
-	When this parameter is omitted and a file named 'pwr.json' exists the current working directory, repositories are read from that file
+	When this parameter is omitted and a file named 'pwr.json' exists in the current or any parent directories, repositories are read from that file
 	  - The file must have the form { "repositories": ["example.com/v2/some/repo"] }
 	  - The registry (e.g. 'example.com/v2/') may be omitted when the registry is DockerHub
 	When this parameter is omitted and no file is present, a default repository is used
@@ -49,7 +49,7 @@
 	Writes an error if the provided semantic version (a.b.c) is not met by this scripts version
 	Must be called with the `version` command
 .PARAMETER Override
-	Overrides `pwr.json` package versions with the versions provided by the `Packages` parameter
+	Overrides 'pwr.json' package versions with the versions provided by the `Packages` parameter
 	The package must be declared in the configuration file
 	The package must not be expressed by a file URI
 .PARAMETER DaysOld
@@ -61,7 +61,7 @@
 	Use with the `remove` command to show the dry-run of packages to remove
 .PARAMETER Run
 	Executes the user-defined script inside a shell session
-	The script is declared like { ..., "scripts": { "name": "something to run" } } in a pwr.json file
+	The script is declared like { ..., "scripts": { "name": "something to run" } } in 'pwr.json'
 	Additional arguments are passed to the script when the value of this parameter includes the delimiter "--" with subsequent text
 	Scripts support pre and post actions when accompanying keys "pre<name>" or "post<name>" exist
 #>
@@ -274,18 +274,18 @@ function Split-PwrPackage($Pkg) {
 		$Split = $Pkg.Split('<')
 		$Uri = $Split[0].trim()
 		return @{
-			Name   = $Uri
-			Ref    = $Uri
-			Local  = $true
-			Path   = (Resolve-Path $Uri.Substring(8)).Path
+			Name = $Uri
+			Ref = $Uri
+			Local = $true
+			Path = (Resolve-Path $Uri.Substring(8)).Path
 			Config = if ($Split[1]) { $Split[1].trim() } else { 'default' }
 		}
 	}
 	$Split = $Pkg.Split(':')
 	$Props = @{
-		Name    = $Split[0]
+		Name = $Split[0]
 		Version = 'latest'
-		Config  = 'default'
+		Config = 'default'
 	}
 	if ($Split.count -ge 2 -and ($Split[1] -ne '')) {
 		$Props.Version = $Split[1]
@@ -470,12 +470,14 @@ function Invoke-PwrPackageShell($Pkg) {
 }
 
 function Assert-NonEmptyPwrPackages {
-	if ($Packages.Count -eq 0) {
-		if ($PwrConfig) {
-			$script:Packages = $PwrConfig.Packages
-		}
-	}
-	if ($Packages.Count -eq 0) {
+	if ($Packages.Count -gt 0) {
+		return
+	} elseif ($PwrConfig.Packages.Count -gt 0) {
+		Write-Debug "pwr: using config at $PwrConfigPath"
+		$script:Packages = $PwrConfig.Packages
+	} elseif ($PwrConfig) {
+		Write-PwrFatal "pwr: no packages declared in $PwrConfigPath"
+	} else {
 		Write-PwrFatal 'pwr: no packages provided'
 	}
 }
@@ -502,9 +504,9 @@ function Get-PwrRepositories {
 			}
 		}
 		$Repository = @{
-			URI   = $Uri
+			URI = $Uri
 			Scope = $Uri.Substring($Uri.IndexOf('/v2/') + 4)
-			Hash  = Get-StringHash $Uri
+			Hash = Get-StringHash $Uri
 		}
 		if ($Headers.count -gt 0) {
 			$Repository.Headers = $Headers
@@ -522,20 +524,20 @@ function Save-PSSessionState {
 	$Vars = @()
 	foreach ($V in (Get-Variable)) {
 		$Vars += , @{
-			Name  = $V.Name
+			Name = $V.Name
 			Value = $V.Value
 		}
 	}
 	$EnvVars = @()
 	foreach ($V in (Get-Item env:*)) {
 		$EnvVars += , @{
-			Name  = $V.Name
+			Name = $V.Name
 			Value = $V.Value
 		}
 	}
 	Set-Variable -Name PwrSaveState -Value @{
 		Vars = $Vars
-		Env  = $EnvVars
+		Env = $EnvVars
 	} -Scope 'global'
 }
 
@@ -663,7 +665,7 @@ function Invoke-PwrScripts {
 			Write-PwrFatal "pwr: no declared script '$Run'"
 		}
 	} else {
-		Write-PwrFatal 'pwr: no pwr.json scripts declared'
+		Write-PwrFatal "pwr: no scripts declared in $PwrConfig"
 	}
 }
 
@@ -672,7 +674,7 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = 'C:\Windows\System32\curl.exe'
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.19'
+$env:PwrVersion = '0.4.20'
 Compare-PwrTags
 
 if (-not $Run) {
@@ -727,8 +729,22 @@ if (-not $Run) {
 	}
 }
 
+function Get-PwrConfig {
+	$PwrCfgDir = $ExecutionContext.SessionState.Path.CurrentLocation
+	do {
+		$PwrCfg = "$PwrCfgDir\pwr.json"
+		if (Test-Path -Path $PwrCfg -PathType Leaf) {
+			try {
+				return $PwrCfg, (Get-Content $PwrCfg | ConvertFrom-Json)
+			} catch {
+				Write-PwrFatal "pwr: bad JSON parse of file $PwrCfg - $_"
+			}
+		}
+		$PwrCfgDir = Split-Path $PwrCfgDir -Parent
+	} while ($PwrCfgDir.Length -gt 0)
+}
 
-$PwrConfig = Get-Content 'pwr.json' -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+$PwrConfigPath, $PwrConfig = Get-PwrConfig
 $PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
