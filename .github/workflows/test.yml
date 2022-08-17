@@ -10,4 +10,4 @@ jobs:
       uses: actions/checkout@v2
     - name: Test
       run: |
-       .\test\run.ps1
+        cd test; ./run.ps1

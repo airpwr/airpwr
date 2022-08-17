@@ -208,6 +208,13 @@ function Test-Pwr-DefaultConfig {
 	}
 }
 
+function Test-Pwr-RunWithArg {
+	pwr -packages "file:///$PSScriptRoot\pkg1" -run set, 1, 2, 3
+	Invoke-PwrAssertTrue {
+		$LastExitCode -eq 0
+	}
+}
+
 ###### Test Runner ######
 
 function Invoke-PwrTest($fn) {
@@ -218,9 +225,7 @@ function Invoke-PwrTest($fn) {
 		$env:PwrTestFail = $true
 		Write-Host -ForegroundColor Red "[FAILED] $fn`r`n`t> $_`r`n`t$($_.ScriptStackTrace.Split("`n")  -join "`r`n`t")"
 	} finally {
-		try {
-			pwr exit -ErrorAction 'SilentlyContinue' | Out-Null
-		} catch {}
+		pwr exit -Silent
 	}
 }
 
@@ -237,5 +242,8 @@ switch ($TestName) {
 
 if ($env:PwrTestFail) {
 	$env:PwrTestFail = $null
-	Write-Error "Test failure"
+	Write-Host -ForegroundColor Red "Test failure"
+	exit 1
+} else {
+	exit 0
 }
