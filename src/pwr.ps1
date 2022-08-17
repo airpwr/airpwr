@@ -61,9 +61,10 @@
 	Use with the `remove` command to show the dry-run of packages to remove
 .PARAMETER Run
 	Executes the user-defined script inside a shell session
-	The script is declared like { ..., "scripts": { "name": "something to run" } } in 'pwr.json'
-	Additional arguments are passed to the script when the value of this parameter includes the delimiter "--" with subsequent text
-	Scripts support pre and post actions when accompanying keys "pre<name>" or "post<name>" exist
+	The script is declared like `{ ..., "scripts": { "name": "something to run" } }` in 'pwr.json'
+	The command string is interpreted by the String.Format method, so characters such as '{' and '}' need to be escaped by '{{' and '}}' respectively
+	Additional arguments may also be provided to the script, referenced in the script as {1}, {2}, etc.
+	For instance, a parameterized script is declared like `{ ..., "scripts": { "name": "something to run --arg={1}" } }` in 'pwr.json'
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param (
@@ -83,7 +84,7 @@ param (
 	[switch]$Quiet,
 	[switch]$Silent,
 	[switch]$Override,
-	[string]$Run
+	[string[]]$Run
 )
 
 Class SemanticVersion : System.IComparable {
@@ -372,6 +373,7 @@ function Compare-PwrTags {
 	}
 	if ($Latest.LaterThan([SemanticVersion]::new($env:PwrVersion))) {
 		Write-PwrHost -ForegroundColor Green "pwr: a new version ($Latest) is available!"
+		Write-PwrHost -ForegroundColor Green "pwr: use command 'update' to install"
 	}
 }
 
@@ -639,30 +641,77 @@ function Resolve-PwrPackageOverrides {
 	[string[]]$script:Packages = $Pkgs
 }
 
+function Enter-Shell {
+	if ($env:InPwrShell) {
+		Write-PwrFatal "pwr: cannot start a new shell session while one is in progress; use command 'exit' to end the current session"
+	}
+	Assert-NonEmptyPwrPackages
+	$Pkgs = @()
+	foreach ($P in $Packages) {
+		$Pkg = Assert-PwrPackage $P
+		if (-not (Test-PwrPackage $Pkg)) {
+			Invoke-PwrPackagePull $Pkg
+		}
+		$Pkgs += , $Pkg
+	}
+	Save-PSSessionState
+	$env:InPwrShell = $true
+	Clear-PSSessionState
+	foreach ($P in $Pkgs) {
+		try {
+			Invoke-PwrPackageShell $P
+		} catch {
+			Restore-PSSessionState
+			$env:InPwrShell = $null
+			throw $_
+		}
+		Write-PwrHost -ForegroundColor Blue -NoNewline 'pwr:'
+		Write-PwrHost " using $($P.ref)"
+	}
+	if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
+		$Pwr = Split-Path $script:MyInvocation.MyCommand.Path -Parent
+		$env:Path = "$env:Path;$Pwr"
+	}
+	$env:Path = "$env:Path;\windows;\windows\system32;\windows\system32\windowspowershell\v1.0"
+}
+
+function Exit-Shell {
+	if ($env:InPwrShell) {
+		Restore-PSSessionState
+		$env:InPwrShell = $null
+		Write-Debug 'pwr: shell session closed'
+	} else {
+		Write-PwrFatal 'pwr: no shell session is in progress'
+	}
+}
+
 function Invoke-PwrScripts {
 	if ($PwrConfig.Scripts) {
-		$RunCmd = $Run.Split('--', 2, [StringSplitOptions]::RemoveEmptyEntries)
-		$Name = $RunCmd[0].Trim()
-		$ExtraArgs = if ($RunCmd.Count -eq 2) { $RunCmd[1].Trim() } else { '' }
+		$Name = $Run[0]
 		if ($PwrConfig.Scripts.$Name) {
+			$RunCmd = [String]::Format($PwrConfig.Scripts.$Name, [object[]]$Run)
+			if ($env:InPwrShell) {
+				Write-PwrFatal "pwr: cannot invoke script due to shell session already in progress"
+			}
 			try {
-				& $PSCommandPath shell
-			} catch { }
+				Enter-Shell
+			} catch {
+				exit 1
+			}
 			try {
-				if ($PwrConfig.Scripts."pre$Name") {
-					Invoke-Expression $PwrConfig.Scripts."pre$Name"
-				}
-				Invoke-Expression "$($PwrConfig.Scripts.$Name) $ExtraArgs"
-				if ($PwrConfig.Scripts."post$Name") {
-					Invoke-Expression $PwrConfig.Scripts."post$Name"
-				}
+				Invoke-Expression $RunCmd
+			} catch {
+				$ErrorMessage = $_.ToString().Trim()
 			} finally {
 				if ($env:InPwrShell) {
-					& $PSCommandPath exit
+					Exit-Shell
 				}
 			}
+			if ($ErrorMessage) {
+				Write-PwrFatal "pwr: script '$Name' failed to execute$(if ($ErrorMessage.Length -gt 0) { '' } else { ', ' + $ErrorMessage.Substring(0, 1).ToLower() + $ErrorMessage.Substring(1) })"
+			}
 		} else {
-			Write-PwrFatal "pwr: no declared script '$Run'"
+			Write-PwrFatal "pwr: no declared script '$Name'"
 		}
 	} else {
 		Write-PwrFatal "pwr: no scripts declared in $PwrConfig"
@@ -674,7 +723,7 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:appdata\pwr" }
 $PwrWebPath = 'C:\Windows\System32\curl.exe'
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.20'
+$env:PwrVersion = '0.4.21'
 Compare-PwrTags
 
 if (-not $Run) {
@@ -717,13 +766,7 @@ if (-not $Run) {
 			exit
 		}
 		'exit' {
-			if ($env:InPwrShell) {
-				Restore-PSSessionState
-				$env:InPwrShell = $null
-				Write-Debug 'pwr: shell session closed'
-			} else {
-				Write-PwrFatal 'pwr: no shell session is in progress'
-			}
+			Exit-Shell
 			exit
 		}
 	}
@@ -792,38 +835,11 @@ switch ($Command) {
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
-		Assert-NonEmptyPwrPackages
-		$Pkgs = @()
-		foreach ($P in $Packages) {
-			$Pkg = Assert-PwrPackage $P
-			if (-not (Test-PwrPackage $Pkg)) {
-				Invoke-PwrPackagePull $Pkg
-			}
-			$Pkgs += , $Pkg
+		try {
+			Enter-Shell
+		} catch {
+			exit 1
 		}
-		if (-not $env:InPwrShell) {
-			Save-PSSessionState
-			$env:InPwrShell = $true
-		} else {
-			Write-PwrFatal "pwr: cannot start a new shell session while one is in progress; use `pwr exit` to end the existing session"
-		}
-		Clear-PSSessionState
-		foreach ($P in $Pkgs) {
-			try {
-				Invoke-PwrPackageShell $P
-			} catch {
-				Restore-PSSessionState
-				$env:InPwrShell = $null
-				throw $_
-			}
-			Write-PwrHost -ForegroundColor Blue -NoNewline 'pwr:'
-			Write-PwrHost " using $($P.ref)"
-		}
-		if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
-			$Pwr = Split-Path $MyInvocation.MyCommand.Path -Parent
-			$env:Path = "$env:Path;$Pwr"
-		}
-		$env:Path = "$env:Path;\windows;\windows\system32;\windows\system32\windowspowershell\v1.0"
 	}
 	'ls-config' {
 		foreach ($P in $Packages) {
@@ -915,6 +931,6 @@ switch ($Command) {
 	}
 	Default {
 		Write-PwrHost -ForegroundColor Red "pwr: no such command '$Command'"
-		Write-PwrHost -ForegroundColor Red "     use 'pwr help' for a list of commands"
+		Write-PwrFatal "     use 'pwr help' for a list of commands"
 	}
 }
