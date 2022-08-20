@@ -405,7 +405,7 @@ function Get-PwrPackages {
 						$Pkg = $Matches[1]
 						$Ver = $Matches[2]
 						$Names.$Pkg = $null
-						$Pkgs.$Pkg = @($Pkgs.$Pkg) + @([SemanticVersion]::new($Ver)) | Sort-Object
+						$Pkgs.$Pkg = @($Pkgs.$Pkg) + @([SemanticVersion]::new($Ver)) | Sort-Object -Descending
 					}
 				}
 				foreach ($Name in $Names.Keys) {
@@ -876,14 +876,16 @@ switch ($Command) {
 				$Pkg = $Matches[0]
 				Write-PwrOutput "$Pkg[$($Repo.Uri)]"
 				if ($Repo.Packages.$Pkg -and -not $Quiet -and -not $Silent) {
-					Write-Output $Repo.Packages.$Pkg | Format-List
+					$Repo.Packages.$Pkg | Format-List
 				} else {
 					Write-PwrHost '<none>'
 				}
 			} else {
 				Write-PwrOutput "[$($Repo.Uri)]"
 				if ('' -ne $Repo.Packages -and -not $Quiet -and -not $Silent) {
-					Write-Output $Repo.Packages | Format-List
+					''
+					$Repo.Packages | Format-List | Out-String -Stream | Where-Object{ $_.Length -gt 0 } | Sort-Object
+					''
 				} else {
 					Write-PwrHost '<none>'
 				}
