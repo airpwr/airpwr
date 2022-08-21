@@ -464,7 +464,7 @@ function Invoke-PwrPackageShell($Pkg) {
 	Format-Table $PkgEnv
 	# Vars
 	foreach ($K in $PkgVar.Var.Keys) {
-		Set-Variable -Name $K -Value $PkgVar.Var.$K -Scope 'global'
+		Set-Variable -Name $K -Value $PkgVar.Var.$K -Scope Global
 	}
 	# Env
 	foreach ($K in $PkgVar.Env.Keys) {
@@ -654,25 +654,30 @@ function Enter-Shell {
 	}
 	Assert-NonEmptyPwrPackages
 	$Pkgs = @()
-	foreach ($P in $Packages) {
-		$Pkg = Assert-PwrPackage $P
-		if (-not (Test-PwrPackage $Pkg)) {
-			Invoke-PwrPackagePull $Pkg
+	try {
+		Lock-PwrLock
+		foreach ($P in $Packages) {
+			$Pkg = Assert-PwrPackage $P
+			if (-not (Test-PwrPackage $Pkg)) {
+				Invoke-PwrPackagePull $Pkg
+			}
+			$Pkgs += , $Pkg
 		}
-		$Pkgs += , $Pkg
-	}
-	Save-PSSessionState
-	$env:InPwrShell = $true
-	Clear-PSSessionState
-	foreach ($P in $Pkgs) {
-		try {
-			Invoke-PwrPackageShell $P
-		} catch {
-			Restore-PSSessionState
-			$env:InPwrShell = $null
-			throw $_
+		Save-PSSessionState
+		$env:InPwrShell = $true
+		Clear-PSSessionState
+		foreach ($P in $Pkgs) {
+			try {
+				Invoke-PwrPackageShell $P
+			} catch {
+				Restore-PSSessionState
+				$env:InPwrShell = $null
+				throw $_
+			}
+			Write-PwrOutput "using $($P.Ref)"
 		}
-		Write-PwrOutput "using $($P.Ref)"
+	} finally {
+		Unlock-PwrLock
 	}
 	if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
 		$Pwr = Split-Path $script:MyInvocation.MyCommand.Path -Parent
@@ -792,7 +797,24 @@ function Get-PwrConfig {
 	} while ($PwrCfgDir.Length -gt 0)
 }
 
+function Lock-PwrLock {
+	try {
+		New-Item $PwrLock -ItemType File
+	} catch {
+		Write-PwrThrow "already running`n     if this isn't the case, manually delete $PwrLock"
+	}
+}
+
+function Unlock-PwrLock {
+	try {
+		Remove-Item $PwrLock
+	} catch {
+		Write-PwrWarning 'lock file disappeared!?'
+	}
+}
+
 $PwrConfigPath, $PwrConfig = Get-PwrConfig
+$PwrLock = "$PwrPath\pwr.lock"
 $PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
@@ -807,12 +829,19 @@ if ($Run) {
 switch ($Command) {
 	'fetch' {
 		Assert-NonEmptyPwrPackages
-		foreach ($P in $Packages) {
-			$Pkg = Assert-PwrPackage $P
-			if ($Pkg.Local) {
-				Write-PwrFatal "tried to fetch local package $($Pkg.Ref)"
+		try {
+			Lock-PwrLock
+			foreach ($P in $Packages) {
+				$Pkg = Assert-PwrPackage $P
+				if ($Pkg.Local) {
+					Write-PwrFatal "tried to fetch local package $($Pkg.Ref)"
+				}
+				Invoke-PwrPackagePull $Pkg
 			}
-			Invoke-PwrPackagePull $Pkg
+		} catch {
+			exit 1
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	'load' {
@@ -820,6 +849,7 @@ switch ($Command) {
 		$_Path = $env:Path
 		Clear-Item env:Path
 		try {
+			Lock-PwrLock
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
 				if (-not (Test-PwrPackage $Pkg)) {
@@ -836,6 +866,9 @@ switch ($Command) {
 			$env:Path = "$env:Path;$_Path"
 		} catch {
 			$env:Path = $_Path
+			exit 1
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
@@ -893,46 +926,53 @@ switch ($Command) {
 		}
 	}
 	{$_ -in 'rm', 'remove'} {
-		if ($DaysOld) {
-			if ($Packages.Count -gt 0) {
-				Write-PwrFatal '-DaysOld not compatible with -Packages'
-			}
-			$Pkgs = Get-InstalledPwrPackages
-			foreach ($Name in $Pkgs.Keys) {
-				foreach ($Ver in $Pkgs.$Name) {
-					$PkgRoot = "$PwrPkgPath\$Name-$Ver"
-					try {
-						$Item = Get-ChildItem -Path "$PkgRoot\.pwr"
-					} catch {
-						Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
-						continue
+		try {
+			Lock-PwrLock
+			if ($DaysOld) {
+				if ($Packages.Count -gt 0) {
+					Write-PwrFatal '-DaysOld not compatible with -Packages'
+				}
+				$Pkgs = Get-InstalledPwrPackages
+				foreach ($Name in $Pkgs.Keys) {
+					foreach ($Ver in $Pkgs.$Name) {
+						$PkgRoot = "$PwrPkgPath\$Name-$Ver"
+						try {
+							$Item = Get-ChildItem -Path "$PkgRoot\.pwr"
+						} catch {
+							Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
+							continue
+						}
+						$Item.LastAccessTime = $Item.LastAccessTime
+						$Old = $Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
+						if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
+							Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
+							Remove-Directory $PkgRoot
+							Write-PwrHost 'done.'
+						}
 					}
-					$Item.LastAccessTime = $Item.LastAccessTime
-					$Old = $Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
-					if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
-						Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
-						Remove-Directory $PkgRoot
-						Write-PwrHost 'done.'
+				}
+			} else {
+				Assert-NonEmptyPwrPackages
+				foreach ($P in $Packages) {
+					$Pkg = Assert-PwrPackage $P
+					if ($Pkg.Local) {
+						Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
+					} elseif (Test-PwrPackage $Pkg) {
+						if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
+							Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
+							$Path = Resolve-PwrPackge $Pkg
+							Remove-Directory $Path
+							Write-PwrHost 'done.'
+						}
+					} else {
+						Write-PwrOutput -ForegroundColor Red "$($Pkg.Ref) not found"
 					}
 				}
 			}
-		} else {
-			Assert-NonEmptyPwrPackages
-			foreach ($P in $Packages) {
-				$Pkg = Assert-PwrPackage $P
-				if ($Pkg.Local) {
-					Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
-				} elseif (Test-PwrPackage $Pkg) {
-					if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
-						Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
-						$Path = Resolve-PwrPackge $Pkg
-						Remove-Directory $Path
-						Write-PwrHost 'done.'
-					}
-				} else {
-					Write-PwrOutput -ForegroundColor Red "$($Pkg.Ref) not found"
-				}
-			}
+		} catch {
+			exit 1
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	Default {
