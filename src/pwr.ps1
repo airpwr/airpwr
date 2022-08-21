@@ -370,7 +370,7 @@ function Compare-PwrTags {
 			[IO.File]::WriteAllText($Cache, $Req)
 		} catch { }
 	}
-	$Tags = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+	$Tags = Get-Content $Cache -ErrorAction SilentlyContinue | ConvertFrom-Json
 	$Latest = [SemanticVersion]::new()
 	foreach ($Tag in $Tags) {
 		$Ver = [SemanticVersion]::new($Tag.Name.Substring(1))
@@ -418,7 +418,7 @@ function Get-PwrPackages {
 				Write-Debug "    > $($Error[0])"
 			}
 		}
-		$Repo.Packages = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+		$Repo.Packages = Get-Content $Cache -ErrorAction SilentlyContinue | ConvertFrom-Json
 	}
 
 }
@@ -547,29 +547,29 @@ function Save-PSSessionState {
 	Set-Variable -Name PwrSaveState -Value @{
 		Vars = $Vars
 		Env = $EnvVars
-	} -Scope 'global'
+	} -Scope Global
 }
 
 function Restore-PSSessionState {
 	Write-PwrDebug 'restoring state'
-	$State = (Get-Variable 'PwrSaveState' -Scope 'global').Value
+	$State = (Get-Variable 'PwrSaveState' -Scope Global).Value
 	foreach ($V in $State.Vars) {
-		Set-Variable -Name "$($V.Name)" -Value $V.Value -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+		Set-Variable -Name "$($V.Name)" -Value $V.Value -Scope Global -Force -ErrorAction SilentlyContinue
 	}
-	Remove-Item -Path 'env:*' -Force -ErrorAction 'SilentlyContinue'
+	Remove-Item -Path 'env:*' -Force -ErrorAction SilentlyContinue
 	foreach ($E in $State.Env) {
-		Set-Item -Path "env:$($E.Name)" -Value $E.Value -Force -ErrorAction 'SilentlyContinue'
+		Set-Item -Path "env:$($E.Name)" -Value $E.Value -Force -ErrorAction SilentlyContinue
 	}
-	Set-Variable -Name PwrSaveState -Value $null -Scope 'Global'
+	Set-Variable -Name PwrSaveState -Value $null -Scope Global
 }
 
 function Clear-PSSessionState {
 	Write-PwrDebug 'clearing state'
 	$DefaultVariableNames = '$', '?', '^', 'args', 'ConfirmPreference', 'ConsoleFileName', 'DebugPreference', 'Error', 'ErrorActionPreference', 'ErrorView', 'ExecutionContext', 'false', 'FormatEnumerationLimit', 'HOME', 'Host', 'InformationPreference', 'input', 'MaximumAliasCount', 'MaximumDriveCount', 'MaximumErrorCount', 'MaximumFunctionCount', 'MaximumHistoryCount', 'MaximumVariableCount', 'MyInvocation', 'NestedPromptLevel', 'null', 'OutputEncoding', 'PID', 'PROFILE', 'ProgressPreference', 'PSBoundParameters', 'PSCommandPath', 'PSCulture', 'PSDefaultParameterValues', 'PSEdition', 'PSEmailServer', 'PSHOME', 'PSScriptRoot', 'PSSessionApplicationName', 'PSSessionConfigurationName', 'PSSessionOption', 'PSUICulture', 'PSVersionTable', 'PWD', 'ShellId', 'StackTrace', 'true', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference', 'PwrSaveState'
-	$Vars = Get-Variable -Scope 'global'
+	$Vars = Get-Variable -Scope Global
 	foreach ($Var in $Vars) {
 		if ($Var.Name -notin $DefaultVariableNames) {
-			Remove-Variable -Name "$($Var.Name)" -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+			Remove-Variable -Name "$($Var.Name)" -Scope Global -Force -ErrorAction SilentlyContinue
 		}
 	}
 	foreach ($Key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).Keys) {
@@ -679,7 +679,7 @@ function Enter-Shell {
 	} finally {
 		Unlock-PwrLock
 	}
-	if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
+	if (-not (Get-Command pwr -ErrorAction SilentlyContinue)) {
 		$Pwr = Split-Path $script:MyInvocation.MyCommand.Path -Parent
 		$env:Path = "$env:Path;$Pwr"
 	}
@@ -815,7 +815,7 @@ function Unlock-PwrLock {
 
 $PwrConfigPath, $PwrConfig = Get-PwrConfig
 $PwrLock = "$PwrPath\pwr.lock"
-$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
+$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction SilentlyContinue | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
 Resolve-PwrPackageOverrides
