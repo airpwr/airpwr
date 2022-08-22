@@ -809,7 +809,7 @@ function Unlock-PwrLock {
 	try {
 		Remove-Item $PwrLock
 	} catch {
-		Write-PwrWarning 'lock file disappeared!?'
+		Write-PwrWarning "lock file $PwrLock could not be removed`n     ensure this file does not exist before running pwr again"
 	}
 }
 
