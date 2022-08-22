@@ -378,7 +378,7 @@ function Compare-PwrTags {
 			$Latest = $Ver
 		}
 	}
-	if ($Latest.LaterThan([SemanticVersion]::new($env:PwrVersion))) {
+	if ($Latest.LaterThan([SemanticVersion]::new($env:PwrVersion)) -and ($Command -ne 'update')) {
 		Write-PwrOutput -ForegroundColor Green "a new version ($Latest) is available!"
 		Write-PwrOutput -ForegroundColor Green "use command 'update' to install"
 	}
