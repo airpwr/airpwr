@@ -733,7 +733,7 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.21'
+$env:PwrVersion = '0.4.22'
 Compare-PwrTags
 
 if (-not $Run) {
@@ -801,7 +801,7 @@ function Lock-PwrLock {
 	try {
 		New-Item $PwrLock -ItemType File
 	} catch {
-		Write-PwrThrow "already running`n     if this isn't the case, manually delete $PwrLock"
+		Write-PwrFatal "already fetching or removing package`n     if this isn't the case, manually delete $PwrLock"
 	}
 }
 
@@ -829,50 +829,44 @@ if ($Run) {
 switch ($Command) {
 	'fetch' {
 		Assert-NonEmptyPwrPackages
+		Lock-PwrLock
 		try {
-			Lock-PwrLock
-			try {
-				foreach ($P in $Packages) {
-					$Pkg = Assert-PwrPackage $P
-					if ($Pkg.Local) {
-						Write-PwrFatal "tried to fetch local package $($Pkg.Ref)"
-					}
-					Invoke-PwrPackagePull $Pkg
+			foreach ($P in $Packages) {
+				$Pkg = Assert-PwrPackage $P
+				if ($Pkg.Local) {
+					Write-PwrFatal "tried to fetch local package $($Pkg.Ref)"
 				}
-			} finally {
-				Unlock-PwrLock
+				Invoke-PwrPackagePull $Pkg
 			}
-		} catch {
-			exit 1
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	'load' {
 		Assert-NonEmptyPwrPackages
+		Lock-PwrLock
 		$_Path = $env:Path
-		Clear-Item env:Path
 		try {
-			Lock-PwrLock
-			try {
-				foreach ($P in $Packages) {
-					$Pkg = Assert-PwrPackage $P
-					if (-not (Test-PwrPackage $Pkg)) {
-						Invoke-PwrPackagePull $Pkg
-					}
-					if (-not "$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
-						Invoke-PwrPackageShell $Pkg
-						$env:PwrLoadedPackages = "$($Pkg.Ref) $env:PwrLoadedPackages"
-						Write-PwrOutput "loaded $($Pkg.Ref)"
-					} elseif (Test-PwrPackage $Pkg) {
-						Write-PwrOutput "$($Pkg.Ref) already loaded"
-					}
+			Clear-Item env:Path
+			foreach ($P in $Packages) {
+				$Pkg = Assert-PwrPackage $P
+				if (-not (Test-PwrPackage $Pkg)) {
+					Invoke-PwrPackagePull $Pkg
 				}
-				$env:Path = "$env:Path;$_Path"
-			} finally {
-				Unlock-PwrLock
+				if (-not "$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
+					Invoke-PwrPackageShell $Pkg
+					$env:PwrLoadedPackages = "$($Pkg.Ref) $env:PwrLoadedPackages"
+					Write-PwrOutput "loaded $($Pkg.Ref)"
+				} elseif (Test-PwrPackage $Pkg) {
+					Write-PwrOutput "$($Pkg.Ref) already loaded"
+				}
 			}
+			$env:Path = "$env:Path;$_Path"
 		} catch {
 			$env:Path = $_Path
 			exit 1
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
@@ -930,55 +924,51 @@ switch ($Command) {
 		}
 	}
 	{$_ -in 'rm', 'remove'} {
+		Lock-PwrLock
 		try {
-			Lock-PwrLock
-			try {
-				if ($DaysOld) {
-					if ($Packages.Count -gt 0) {
-						Write-PwrFatal '-DaysOld not compatible with -Packages'
-					}
-					$Pkgs = Get-InstalledPwrPackages
-					foreach ($Name in $Pkgs.Keys) {
-						foreach ($Ver in $Pkgs.$Name) {
-							$PkgRoot = "$PwrPkgPath\$Name-$Ver"
-							try {
-								$Item = Get-ChildItem -Path "$PkgRoot\.pwr"
-							} catch {
-								Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
-								continue
-							}
-							$Item.LastAccessTime = $Item.LastAccessTime
-							$Old = $Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
-							if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
-								Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
-								Remove-Directory $PkgRoot
-								Write-PwrHost 'done.'
-							}
+			if ($DaysOld) {
+				if ($Packages.Count -gt 0) {
+					Write-PwrFatal '-DaysOld not compatible with -Packages'
+				}
+				$Pkgs = Get-InstalledPwrPackages
+				foreach ($Name in $Pkgs.Keys) {
+					foreach ($Ver in $Pkgs.$Name) {
+						$PkgRoot = "$PwrPkgPath\$Name-$Ver"
+						try {
+							$Item = Get-ChildItem -Path "$PkgRoot\.pwr"
+						} catch {
+							Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
+							continue
 						}
-					}
-				} else {
-					Assert-NonEmptyPwrPackages
-					foreach ($P in $Packages) {
-						$Pkg = Assert-PwrPackage $P
-						if ($Pkg.Local) {
-							Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
-						} elseif (Test-PwrPackage $Pkg) {
-							if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
-								Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
-								$Path = Resolve-PwrPackge $Pkg
-								Remove-Directory $Path
-								Write-PwrHost 'done.'
-							}
-						} else {
-							Write-PwrOutput -ForegroundColor Red "$($Pkg.Ref) not found"
+						$Item.LastAccessTime = $Item.LastAccessTime
+						$Old = $Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
+						if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
+							Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
+							Remove-Directory $PkgRoot
+							Write-PwrHost 'done.'
 						}
 					}
 				}
-			} finally {
-				Unlock-PwrLock
+			} else {
+				Assert-NonEmptyPwrPackages
+				foreach ($P in $Packages) {
+					$Pkg = Assert-PwrPackage $P
+					if ($Pkg.Local) {
+						Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
+					} elseif (Test-PwrPackage $Pkg) {
+						if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
+							Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
+							$Path = Resolve-PwrPackge $Pkg
+							Remove-Directory $Path
+							Write-PwrHost 'done.'
+						}
+					} else {
+						Write-PwrOutput -ForegroundColor Red "$($Pkg.Ref) not found"
+					}
+				}
 			}
-		} catch {
-			exit 1
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	Default {
