@@ -378,7 +378,7 @@ function Compare-PwrTags {
 			$Latest = $Ver
 		}
 	}
-	if ($Latest.LaterThan([SemanticVersion]::new($env:PwrVersion)) -and ($Command -ne 'update')) {
+	if ($Latest.LaterThan([SemanticVersion]::new($env:PwrVersion))) {
 		Write-PwrOutput -ForegroundColor Green "a new version ($Latest) is available!"
 		Write-PwrOutput -ForegroundColor Green "use command 'update' to install"
 	}
@@ -734,7 +734,6 @@ $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
 $env:PwrVersion = '0.4.22'
-Compare-PwrTags
 
 if (-not $Run) {
 	switch ($Command) {
@@ -748,11 +747,9 @@ if (-not $Run) {
 			} else {
 				Write-PwrOutput "version $env:PwrVersion"
 			}
-			exit
 		}
 		{$_ -in '', 'h', 'help'} {
 			Get-Help $MyInvocation.MyCommand.Path -Detailed
-			exit
 		}
 		'update' {
 			if ($Offline) {
@@ -773,13 +770,12 @@ if (-not $Run) {
 				}
 				& "$PwrCmd\pwr.ps1" version
 			}
-			exit
 		}
 		'exit' {
 			Exit-Shell
-			exit
 		}
 	}
+	exit
 }
 
 function Get-PwrConfig {
@@ -813,6 +809,7 @@ function Unlock-PwrLock {
 	}
 }
 
+Compare-PwrTags
 $PwrConfigPath, $PwrConfig = Get-PwrConfig
 $PwrLock = "$PwrPath\pwr.lock"
 $PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction SilentlyContinue | ConvertFrom-Json | ConvertTo-HashTable
