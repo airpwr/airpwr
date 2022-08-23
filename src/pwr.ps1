@@ -370,7 +370,7 @@ function Compare-PwrTags {
 			[IO.File]::WriteAllText($Cache, $Req)
 		} catch { }
 	}
-	$Tags = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+	$Tags = Get-Content $Cache -ErrorAction SilentlyContinue | ConvertFrom-Json
 	$Latest = [SemanticVersion]::new()
 	foreach ($Tag in $Tags) {
 		$Ver = [SemanticVersion]::new($Tag.Name.Substring(1))
@@ -418,7 +418,7 @@ function Get-PwrPackages {
 				Write-Debug "    > $($Error[0])"
 			}
 		}
-		$Repo.Packages = Get-Content $Cache -ErrorAction 'SilentlyContinue' | ConvertFrom-Json
+		$Repo.Packages = Get-Content $Cache -ErrorAction SilentlyContinue | ConvertFrom-Json
 	}
 
 }
@@ -464,7 +464,7 @@ function Invoke-PwrPackageShell($Pkg) {
 	Format-Table $PkgEnv
 	# Vars
 	foreach ($K in $PkgVar.Var.Keys) {
-		Set-Variable -Name $K -Value $PkgVar.Var.$K -Scope 'global'
+		Set-Variable -Name $K -Value $PkgVar.Var.$K -Scope Global
 	}
 	# Env
 	foreach ($K in $PkgVar.Env.Keys) {
@@ -547,29 +547,29 @@ function Save-PSSessionState {
 	Set-Variable -Name PwrSaveState -Value @{
 		Vars = $Vars
 		Env = $EnvVars
-	} -Scope 'global'
+	} -Scope Global
 }
 
 function Restore-PSSessionState {
 	Write-PwrDebug 'restoring state'
-	$State = (Get-Variable 'PwrSaveState' -Scope 'global').Value
+	$State = (Get-Variable 'PwrSaveState' -Scope Global).Value
 	foreach ($V in $State.Vars) {
-		Set-Variable -Name "$($V.Name)" -Value $V.Value -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+		Set-Variable -Name "$($V.Name)" -Value $V.Value -Scope Global -Force -ErrorAction SilentlyContinue
 	}
-	Remove-Item -Path 'env:*' -Force -ErrorAction 'SilentlyContinue'
+	Remove-Item -Path 'env:*' -Force -ErrorAction SilentlyContinue
 	foreach ($E in $State.Env) {
-		Set-Item -Path "env:$($E.Name)" -Value $E.Value -Force -ErrorAction 'SilentlyContinue'
+		Set-Item -Path "env:$($E.Name)" -Value $E.Value -Force -ErrorAction SilentlyContinue
 	}
-	Set-Variable -Name PwrSaveState -Value $null -Scope 'Global'
+	Set-Variable -Name PwrSaveState -Value $null -Scope Global
 }
 
 function Clear-PSSessionState {
 	Write-PwrDebug 'clearing state'
 	$DefaultVariableNames = '$', '?', '^', 'args', 'ConfirmPreference', 'ConsoleFileName', 'DebugPreference', 'Error', 'ErrorActionPreference', 'ErrorView', 'ExecutionContext', 'false', 'FormatEnumerationLimit', 'HOME', 'Host', 'InformationPreference', 'input', 'MaximumAliasCount', 'MaximumDriveCount', 'MaximumErrorCount', 'MaximumFunctionCount', 'MaximumHistoryCount', 'MaximumVariableCount', 'MyInvocation', 'NestedPromptLevel', 'null', 'OutputEncoding', 'PID', 'PROFILE', 'ProgressPreference', 'PSBoundParameters', 'PSCommandPath', 'PSCulture', 'PSDefaultParameterValues', 'PSEdition', 'PSEmailServer', 'PSHOME', 'PSScriptRoot', 'PSSessionApplicationName', 'PSSessionConfigurationName', 'PSSessionOption', 'PSUICulture', 'PSVersionTable', 'PWD', 'ShellId', 'StackTrace', 'true', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference', 'PwrSaveState'
-	$Vars = Get-Variable -Scope 'global'
+	$Vars = Get-Variable -Scope Global
 	foreach ($Var in $Vars) {
 		if ($Var.Name -notin $DefaultVariableNames) {
-			Remove-Variable -Name "$($Var.Name)" -Scope 'global' -Force -ErrorAction 'SilentlyContinue'
+			Remove-Variable -Name "$($Var.Name)" -Scope Global -Force -ErrorAction SilentlyContinue
 		}
 	}
 	foreach ($Key in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).Keys) {
@@ -654,27 +654,32 @@ function Enter-Shell {
 	}
 	Assert-NonEmptyPwrPackages
 	$Pkgs = @()
-	foreach ($P in $Packages) {
-		$Pkg = Assert-PwrPackage $P
-		if (-not (Test-PwrPackage $Pkg)) {
-			Invoke-PwrPackagePull $Pkg
+	Lock-PwrLock
+	try {
+		foreach ($P in $Packages) {
+			$Pkg = Assert-PwrPackage $P
+			if (-not (Test-PwrPackage $Pkg)) {
+				Invoke-PwrPackagePull $Pkg
+			}
+			$Pkgs += , $Pkg
 		}
-		$Pkgs += , $Pkg
-	}
-	Save-PSSessionState
-	$env:InPwrShell = $true
-	Clear-PSSessionState
-	foreach ($P in $Pkgs) {
-		try {
-			Invoke-PwrPackageShell $P
-		} catch {
-			Restore-PSSessionState
-			$env:InPwrShell = $null
-			throw $_
+		Save-PSSessionState
+		$env:InPwrShell = $true
+		Clear-PSSessionState
+		foreach ($P in $Pkgs) {
+			try {
+				Invoke-PwrPackageShell $P
+			} catch {
+				Restore-PSSessionState
+				$env:InPwrShell = $null
+				throw $_
+			}
+			Write-PwrOutput "using $($P.Ref)"
 		}
-		Write-PwrOutput "using $($P.Ref)"
+	} finally {
+		Unlock-PwrLock
 	}
-	if (-not (Get-Command pwr -ErrorAction 'SilentlyContinue')) {
+	if (-not (Get-Command pwr -ErrorAction SilentlyContinue)) {
 		$Pwr = Split-Path $script:MyInvocation.MyCommand.Path -Parent
 		$env:Path = "$env:Path;$Pwr"
 	}
@@ -728,8 +733,7 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.21'
-Compare-PwrTags
+$env:PwrVersion = '0.4.22'
 
 if (-not $Run) {
 	switch ($Command) {
@@ -792,8 +796,26 @@ function Get-PwrConfig {
 	} while ($PwrCfgDir.Length -gt 0)
 }
 
+function Lock-PwrLock {
+	try {
+		New-Item $PwrLock -ItemType File | Out-Null
+	} catch {
+		Write-PwrFatal "already fetching or removing package`n     if this isn't the case, manually delete $PwrLock"
+	}
+}
+
+function Unlock-PwrLock {
+	try {
+		Remove-Item $PwrLock
+	} catch {
+		Write-PwrWarning "lock file $PwrLock could not be removed`n     ensure this file does not exist before running pwr again"
+	}
+}
+
+Compare-PwrTags
 $PwrConfigPath, $PwrConfig = Get-PwrConfig
-$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction 'SilentlyContinue' | ConvertFrom-Json | ConvertTo-HashTable
+$PwrLock = "$PwrPath\pwr.lock"
+$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction SilentlyContinue | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
 Resolve-PwrPackageOverrides
@@ -807,19 +829,25 @@ if ($Run) {
 switch ($Command) {
 	'fetch' {
 		Assert-NonEmptyPwrPackages
-		foreach ($P in $Packages) {
-			$Pkg = Assert-PwrPackage $P
-			if ($Pkg.Local) {
-				Write-PwrFatal "tried to fetch local package $($Pkg.Ref)"
+		Lock-PwrLock
+		try {
+			foreach ($P in $Packages) {
+				$Pkg = Assert-PwrPackage $P
+				if ($Pkg.Local) {
+					Write-PwrFatal "tried to fetch local package $($Pkg.Ref)"
+				}
+				Invoke-PwrPackagePull $Pkg
 			}
-			Invoke-PwrPackagePull $Pkg
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	'load' {
 		Assert-NonEmptyPwrPackages
+		Lock-PwrLock
 		$_Path = $env:Path
-		Clear-Item env:Path
 		try {
+			Clear-Item env:Path
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
 				if (-not (Test-PwrPackage $Pkg)) {
@@ -836,6 +864,9 @@ switch ($Command) {
 			$env:Path = "$env:Path;$_Path"
 		} catch {
 			$env:Path = $_Path
+			exit 1
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	{$_ -in 'sh', 'shell'} {
@@ -893,46 +924,51 @@ switch ($Command) {
 		}
 	}
 	{$_ -in 'rm', 'remove'} {
-		if ($DaysOld) {
-			if ($Packages.Count -gt 0) {
-				Write-PwrFatal '-DaysOld not compatible with -Packages'
-			}
-			$Pkgs = Get-InstalledPwrPackages
-			foreach ($Name in $Pkgs.Keys) {
-				foreach ($Ver in $Pkgs.$Name) {
-					$PkgRoot = "$PwrPkgPath\$Name-$Ver"
-					try {
-						$Item = Get-ChildItem -Path "$PkgRoot\.pwr"
-					} catch {
-						Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
-						continue
+		Lock-PwrLock
+		try {
+			if ($DaysOld) {
+				if ($Packages.Count -gt 0) {
+					Write-PwrFatal '-DaysOld not compatible with -Packages'
+				}
+				$Pkgs = Get-InstalledPwrPackages
+				foreach ($Name in $Pkgs.Keys) {
+					foreach ($Ver in $Pkgs.$Name) {
+						$PkgRoot = "$PwrPkgPath\$Name-$Ver"
+						try {
+							$Item = Get-ChildItem -Path "$PkgRoot\.pwr"
+						} catch {
+							Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
+							continue
+						}
+						$Item.LastAccessTime = $Item.LastAccessTime
+						$Old = $Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
+						if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
+							Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
+							Remove-Directory $PkgRoot
+							Write-PwrHost 'done.'
+						}
 					}
-					$Item.LastAccessTime = $Item.LastAccessTime
-					$Old = $Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days $DaysOld))
-					if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
-						Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
-						Remove-Directory $PkgRoot
-						Write-PwrHost 'done.'
+				}
+			} else {
+				Assert-NonEmptyPwrPackages
+				foreach ($P in $Packages) {
+					$Pkg = Assert-PwrPackage $P
+					if ($Pkg.Local) {
+						Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
+					} elseif (Test-PwrPackage $Pkg) {
+						if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
+							Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
+							$Path = Resolve-PwrPackge $Pkg
+							Remove-Directory $Path
+							Write-PwrHost 'done.'
+						}
+					} else {
+						Write-PwrOutput -ForegroundColor Red "$($Pkg.Ref) not found"
 					}
 				}
 			}
-		} else {
-			Assert-NonEmptyPwrPackages
-			foreach ($P in $Packages) {
-				$Pkg = Assert-PwrPackage $P
-				if ($Pkg.Local) {
-					Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
-				} elseif (Test-PwrPackage $Pkg) {
-					if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
-						Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
-						$Path = Resolve-PwrPackge $Pkg
-						Remove-Directory $Path
-						Write-PwrHost 'done.'
-					}
-				} else {
-					Write-PwrOutput -ForegroundColor Red "$($Pkg.Ref) not found"
-				}
-			}
+		} finally {
+			Unlock-PwrLock
 		}
 	}
 	Default {

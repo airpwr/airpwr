@@ -13,10 +13,15 @@ function Invoke-PwrAssertTrue($block) {
 }
 
 function Invoke-PwrAssertThrows($block) {
+	$LASTEXITCODE = $null
 	try {
 		Invoke-Command -ScriptBlock $block | Out-Null
+	} catch {
+		$LASTEXITCODE = 1
+	}
+	if ($LASTEXITCODE -eq 0) {
 		Write-Error "Assertion Failed to Throw: $block"
-	} catch { }
+	}
 }
 
 function Invoke-PwrAssertNoThrows($block) {
@@ -30,7 +35,7 @@ function Invoke-PwrAssertNoThrows($block) {
 ###### Tests ######
 
 function Test-Pwr-BuildVersions {
-	. pwr v | Out-Null
+	. pwr v -Quiet
 	Invoke-PwrAssertTrue {
 		$s = '1.2.3+4'
 		$v = [SemanticVersion]::new($s)
@@ -62,7 +67,7 @@ function Test-Pwr-BuildVersions {
 }
 
 function Test-Pwr-AssertMinVersion {
-	. pwr v | Out-Null
+	. pwr v -Quiet
 	Invoke-PwrAssertNoThrows {
 		pwr v -AssertMinimum "$env:PwrVersion"
 	}
@@ -100,7 +105,7 @@ function Test-Pwr-GlobalVariableIsolation {
 	$global:x = 'hi'
 	pwr sh "file:///$PSScriptRoot\pkg1"
 	Invoke-PwrAssertTrue {
-		$x -eq $null
+		$null -eq $x
 	}
 	pwr exit
 	Invoke-PwrAssertTrue {
