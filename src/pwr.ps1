@@ -747,9 +747,11 @@ if (-not $Run) {
 			} else {
 				Write-PwrOutput "version $env:PwrVersion"
 			}
+			exit
 		}
 		{$_ -in '', 'h', 'help'} {
 			Get-Help $MyInvocation.MyCommand.Path -Detailed
+			exit
 		}
 		'update' {
 			if ($Offline) {
@@ -770,12 +772,13 @@ if (-not $Run) {
 				}
 				& "$PwrCmd\pwr.ps1" version
 			}
+			exit
 		}
 		'exit' {
 			Exit-Shell
+			exit
 		}
 	}
-	exit
 }
 
 function Get-PwrConfig {
@@ -795,7 +798,7 @@ function Get-PwrConfig {
 
 function Lock-PwrLock {
 	try {
-		New-Item $PwrLock -ItemType File
+		New-Item $PwrLock -ItemType File | Out-Null
 	} catch {
 		Write-PwrFatal "already fetching or removing package`n     if this isn't the case, manually delete $PwrLock"
 	}

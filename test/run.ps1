@@ -105,7 +105,7 @@ function Test-Pwr-GlobalVariableIsolation {
 	$global:x = 'hi'
 	pwr sh "file:///$PSScriptRoot\pkg1"
 	Invoke-PwrAssertTrue {
-		$x -eq $null
+		$null -eq $x
 	}
 	pwr exit
 	Invoke-PwrAssertTrue {
