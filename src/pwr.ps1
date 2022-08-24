@@ -241,7 +241,7 @@ function Get-ImageManifest($Pkg) {
 	return [string]$Resp | ConvertFrom-Json
 }
 
-function Invoke-PullImageLayer($Out, $Repo, $Digest) {
+function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 	$Tmp = "$env:Temp/$($Digest.Replace(':', '_')).tgz"
 	if (-not ((Test-Path -Path $Tmp -PathType Leaf) -and (Get-FileHash -Path $Tmp -Algorithm SHA256).Hash -eq $Digest.Replace('sha256:', ''))) {
 		$Headers = @{}
@@ -252,10 +252,17 @@ function Invoke-PullImageLayer($Out, $Repo, $Digest) {
 		}
 		Invoke-PwrWebRequest "$($Repo.Uri)/blobs/$Digest" -OutFile $Tmp -Headers $Headers
 	} else {
-		Write-PwrHost 'using cache ... ' -NoNewline
+		Write-PwrDebug "using cache for $Ref"
 	}
-	& "$env:HOMEDRIVE\Windows\System32\tar.exe" -xzf $Tmp -C $Out --exclude 'Hives/*' --strip-components 1
-	Remove-Item $Tmp
+	$Hash = "sha256:$((Get-FileHash -Path $Tmp -Algorithm SHA256).Hash)"
+	if (-not (Test-Path -Path $Tmp -PathType Leaf) -or $Hash -ne $Digest) {
+		Write-PwrFatal "the download of layer$(if ($Hash.Length -gt 7) { " with digest $Hash" }) for package $Ref was corrupted and does not match expected digest $Digest"
+	}
+	return Start-Job -ScriptBlock {
+		$Tmp, $Out = $Args
+		& "$env:HOMEDRIVE\Windows\System32\tar.exe" -xzf $Tmp -C $Out --exclude 'Hives/*' --strip-components 1
+		Remove-Item $Tmp
+	} -ArgumentList $Tmp, $Out
 }
 
 function Get-RepoTags($Repo) {
@@ -316,7 +323,7 @@ function Get-LatestVersion($Pkgs, $Matcher) {
 		}
 	}
 	if (-not $Latest) {
-		Write-PwrFatal "no package named $Name$(if ($Matcher) { " matching $Matcher"} else { '' })"
+		Write-PwrFatal "no package named $Name$(if ($Matcher) { " matching $Matcher" })"
 	}
 	return $Latest.ToString()
 }
@@ -430,20 +437,28 @@ function Test-PwrPackage($Pkg) {
 
 function Invoke-PwrPackagePull($Pkg) {
 	if (Test-PwrPackage $Pkg) {
-		Write-PwrOutput "$($Pkg.Ref) already exists"
+		Write-PwrFatal "cannot fetch $($Pkg.Ref) when already exists"
 	} elseif ($Offline) {
 		Write-PwrFatal "cannot fetch $($Pkg.Ref) while running offline"
 	} else {
-		Write-PwrOutput "fetching $($Pkg.Ref) ... " -NoNewline
+		Write-PwrOutput "fetching $($Pkg.Ref)"
 		$Manifest = Get-ImageManifest $Pkg
 		$PkgPath = Resolve-PwrPackge $Pkg
 		mkdir $PkgPath -Force | Out-Null
+		$Job = @()
 		foreach ($Layer in $Manifest.Layers) {
 			if ($Layer.MediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
-				Invoke-PullImageLayer $PkgPath $Pkg.Repo $Layer.Digest
+				$Job += Invoke-PullImageLayer $PkgPath $Pkg.Ref $Pkg.Repo $Layer.Digest
 			}
 		}
-		Write-PwrHost 'done.'
+		return $Job
+	}
+}
+
+function Receive-PwrJob($Job, $Pkgs) {
+	if ($Job.Count -gt 0) {
+		Receive-Job -Job $Job -Wait -AutoRemoveJob
+		Write-PwrOutput "fetched $($Pkgs.Count) package$(if ($Pkgs.Count -ne 1) { 's' }) ($($Refs = foreach ($P in $Pkgs) { $P.Ref }; $Refs -Join ', '))"
 	}
 }
 
@@ -653,20 +668,21 @@ function Enter-Shell {
 		Write-PwrFatal "cannot start a new shell session while one is in progress; use command 'exit' to end the current session"
 	}
 	Assert-NonEmptyPwrPackages
-	$Pkgs = @()
 	Lock-PwrLock
 	try {
 		foreach ($P in $Packages) {
 			$Pkg = Assert-PwrPackage $P
 			if (-not (Test-PwrPackage $Pkg)) {
-				Invoke-PwrPackagePull $Pkg
+				$Job += Invoke-PwrPackagePull $Pkg
+				$Pkgs += , $Pkg
 			}
-			$Pkgs += , $Pkg
+			$PwrPkgs += , $Pkg
 		}
+		Receive-PwrJob $Job $Pkgs
 		Save-PSSessionState
 		$env:InPwrShell = $true
 		Clear-PSSessionState
-		foreach ($P in $Pkgs) {
+		foreach ($P in $PwrPkgs) {
 			try {
 				Invoke-PwrPackageShell $P
 			} catch {
@@ -719,7 +735,7 @@ function Invoke-PwrScripts {
 				}
 			}
 			if ($ErrorMessage) {
-				Write-PwrFatal "script '$Name' failed to execute$(if ($ErrorMessage.Length -gt 0) { '' } else { ', ' + $ErrorMessage.Substring(0, 1).ToLower() + $ErrorMessage.Substring(1) })"
+				Write-PwrFatal "script '$Name' failed to execute$(if ($ErrorMessage.Length -gt 0) { ', ' + $ErrorMessage.Substring(0, 1).ToLower() + $ErrorMessage.Substring(1) })"
 			}
 		} else {
 			Write-PwrFatal "no declared script '$Name'"
@@ -733,7 +749,7 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.22'
+$env:PwrVersion = '0.4.23'
 
 if (-not $Run) {
 	switch ($Command) {
@@ -835,9 +851,14 @@ switch ($Command) {
 				$Pkg = Assert-PwrPackage $P
 				if ($Pkg.Local) {
 					Write-PwrFatal "tried to fetch local package $($Pkg.Ref)"
+				} elseif (Test-PwrPackage $Pkg) {
+					Write-PwrOutput "$($Pkg.Ref) already exists"
+				} else {
+					$Job += Invoke-PwrPackagePull $Pkg
+					$Pkgs += , $Pkg
 				}
-				Invoke-PwrPackagePull $Pkg
 			}
+			Receive-PwrJob $Job $Pkgs
 		} finally {
 			Unlock-PwrLock
 		}
@@ -851,8 +872,13 @@ switch ($Command) {
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
 				if (-not (Test-PwrPackage $Pkg)) {
-					Invoke-PwrPackagePull $Pkg
+					$Job += Invoke-PwrPackagePull $Pkg
+					$Pkgs += , $Pkg
 				}
+				$PwrPkgs += , $Pkg
+			}
+			Receive-PwrJob $Job $Pkgs
+			foreach ($Pkg in $PwrPkgs) {
 				if (-not "$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
 					Invoke-PwrPackageShell $Pkg
 					$env:PwrLoadedPackages = "$($Pkg.Ref) $env:PwrLoadedPackages"
@@ -862,10 +888,13 @@ switch ($Command) {
 				}
 			}
 			$env:Path = "$env:Path;$_Path"
+			$SetPath = $true
 		} catch {
-			$env:Path = $_Path
 			exit 1
 		} finally {
+			if (-not $SetPath) {
+				$env:Path = $_Path
+			}
 			Unlock-PwrLock
 		}
 	}
