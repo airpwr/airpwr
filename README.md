@@ -6,7 +6,7 @@ A package manager and environment to provide consistent tooling for software tea
 
 # Requirements
 
-`pwr` requires the use of `C:\Windows\System32\tar.exe`, which is only availble on Windows builds greater than `17063`.
+`pwr` requires the use of `C:\Windows\System32\curl.exe` and `C:\Windows\System32\tar.exe`, which are only availble on Windows builds greater than `17063`.
 
 Use the following command in a `powershell` terminal to determine your build version.
 
@@ -25,21 +25,6 @@ The installer downloads the `pwr` cmdlet and puts its location on the user path.
 ## Manually
 
 Save the `pwr.ps1` cmdlet to a file on your machine (`$env:AppData\pwr\cmd` is recommended), and add that location to the `Path` environment variable.
-
-# Authenticating to Container Registries
-
-When a repository or registry needs authetication, `pwr` will look for an `auths.json` file located in `$env:AppData\pwr` to make web requests with the appropiate credentials.
-
-> Note: Public repositories on Docker Hub do not need to be specified
-
-An `auths.json` might look like:
-```json
-{
-  "example.com/registry": {
-    "basic": "<base64 string>"
-  }
-}
-```
 
 # Configuration
 
@@ -68,6 +53,21 @@ An `auths.json` might look like:
 Name | Default Value | Description
 -- | -- | --
 `PwrHome` | `$env:AppData\pwr` | The location `pwr` uses for package storage and other data caching.
+
+# Authenticating to Container Registries
+
+When a repository or registry needs authetication, `pwr` will look for an `auths.json` file located in `$env:PwrHome` to make web requests with the appropiate credentials.
+
+> Note: Public repositories on Docker Hub do not need to be specified
+
+An `auths.json` might look like:
+```json
+{
+  "example.com/registry": {
+    "basic": "<base64 string>"
+  }
+}
+```
 
 # Usage
 
