@@ -619,10 +619,16 @@ function Get-InstalledPwrPackages {
 		if ($_.Name -match '(.+)-([0-9].+)') {
 			$Pkg = $Matches[1]
 			$Ver = $Matches[2]
-			$Pkgs.$Pkg += , $Ver
+			$Pkgs.$Pkg = @($Pkgs.$Pkg) + @([SemanticVersion]::new($Ver)) | Sort-Object -Descending
 		}
 	}
-	return $Pkgs
+	return New-Object PSObject -Property $Pkgs
+}
+
+function Format-PwrPackages([parameter(ValueFromPipeline=$True)]$Packages) {
+	''
+	$Packages | Format-List | Out-String -Stream | Where-Object{ $_.Length -gt 0 } | Sort-Object
+	''
 }
 
 function Resolve-PwrPackageOverrides {
@@ -928,7 +934,7 @@ switch ($Command) {
 	}
 	{$_ -in 'ls', 'list'} {
 		if ($Installed) {
-			Get-InstalledPwrPackages | Format-Table
+			Get-InstalledPwrPackages | Format-PwrPackages
 			break
 		}
 		foreach ($Repo in $PwrRepositories) {
@@ -943,9 +949,7 @@ switch ($Command) {
 			} else {
 				Write-PwrOutput "[$($Repo.Uri)]"
 				if ('' -ne $Repo.Packages -and -not $Quiet -and -not $Silent) {
-					''
-					$Repo.Packages | Format-List | Out-String -Stream | Where-Object{ $_.Length -gt 0 } | Sort-Object
-					''
+					$Repo.Packages | Format-PwrPackages
 				} else {
 					Write-PwrHost '<none>'
 				}
