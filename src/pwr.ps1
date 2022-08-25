@@ -138,7 +138,7 @@ Class SemanticVersion : System.IComparable {
 }
 
 function global:Prompt {
-	if ($env:InPwrShell) {
+	if ($env:PwrShellPackages) {
 		Write-Host -ForegroundColor Blue 'pwr:' -NoNewline
 		Write-Host " $($ExecutionContext.SessionState.Path.CurrentLocation)$('>' * ($NestedPromptLevel + 1))" -NoNewline
 		return ' '
@@ -458,7 +458,7 @@ function Invoke-PwrPackagePull($Pkg) {
 function Receive-PwrJob($Job, $Pkgs) {
 	if ($Job.Count -gt 0) {
 		Receive-Job -Job $Job -Wait -AutoRemoveJob
-		Write-PwrOutput "fetched $($Pkgs.Count) package$(if ($Pkgs.Count -ne 1) { 's' }) ($($Refs = foreach ($P in $Pkgs) { $P.Ref }; $Refs -Join ', '))"
+		Write-PwrOutput "fetched $($Pkgs.Count) package$(if ($Pkgs.Count -ne 1) { 's' }) ($($Refs = foreach ($P in $Pkgs) { $P.Ref }; $Refs -join ', '))"
 	}
 }
 
@@ -670,7 +670,7 @@ function Resolve-PwrPackageOverrides {
 }
 
 function Enter-Shell {
-	if ($env:InPwrShell) {
+	if ($env:PwrShellPackages) {
 		Write-PwrFatal "cannot start a new shell session while one is in progress; use command 'exit' to end the current session"
 	}
 	Assert-NonEmptyPwrPackages
@@ -686,14 +686,14 @@ function Enter-Shell {
 		}
 		Receive-PwrJob $Job $Pkgs
 		Save-PSSessionState
-		$env:InPwrShell = $true
+		$env:PwrShellPackages = "$($Refs = foreach ($P in $PwrPkgs) { $P.Ref }; $Refs -join ' ')"
 		Clear-PSSessionState
 		foreach ($P in $PwrPkgs) {
 			try {
 				Invoke-PwrPackageShell $P
 			} catch {
 				Restore-PSSessionState
-				$env:InPwrShell = $null
+				$env:PwrShellPackages = $null
 				throw $_
 			}
 			Write-PwrOutput "using $($P.Ref)"
@@ -709,9 +709,9 @@ function Enter-Shell {
 }
 
 function Exit-Shell {
-	if ($env:InPwrShell) {
+	if ($env:PwrShellPackages) {
 		Restore-PSSessionState
-		$env:InPwrShell = $null
+		$env:PwrShellPackages = $null
 		Write-PwrDebug 'shell session closed'
 	} else {
 		Write-PwrFatal 'no shell session is in progress'
@@ -723,7 +723,7 @@ function Invoke-PwrScripts {
 		$Name = $Run[0]
 		if ($PwrConfig.Scripts.$Name) {
 			$RunCmd = [String]::Format($PwrConfig.Scripts.$Name, [object[]]$Run)
-			if ($env:InPwrShell) {
+			if ($env:PwrShellPackages) {
 				Write-PwrFatal "cannot invoke script due to shell session already in progress"
 			}
 			try {
@@ -736,7 +736,7 @@ function Invoke-PwrScripts {
 			} catch {
 				$ErrorMessage = $_.ToString().Trim()
 			} finally {
-				if ($env:InPwrShell) {
+				if ($env:PwrShellPackages) {
 					Exit-Shell
 				}
 			}
@@ -755,7 +755,7 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.23'
+$env:PwrVersion = '0.4.24'
 
 if (-not $Run) {
 	switch ($Command) {
@@ -874,7 +874,8 @@ switch ($Command) {
 		Lock-PwrLock
 		$_Path = $env:Path
 		try {
-			Clear-Item env:Path
+			$env:Path = $null
+			$Job = $Pkgs = $PwrPkgs = @()
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
 				if (-not (Test-PwrPackage $Pkg)) {
@@ -978,7 +979,7 @@ switch ($Command) {
 						if ($Old -and $PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
 							Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
 							Remove-Directory $PkgRoot
-							Write-PwrHost 'done.'
+							Write-PwrHost 'done'
 						}
 					}
 				}
@@ -988,15 +989,19 @@ switch ($Command) {
 					$Pkg = Assert-PwrPackage $P
 					if ($Pkg.Local) {
 						Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
+					} elseif ("$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
+						Write-PwrFatal "tried to remove loaded package $($Pkg.Ref)"
+					} elseif ("$env:PwrShellPackages".Contains($Pkg.Ref)) {
+						Write-PwrFatal "tried to remove shell session package $($Pkg.Ref)"
 					} elseif (Test-PwrPackage $Pkg) {
 						if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
 							Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
 							$Path = Resolve-PwrPackge $Pkg
 							Remove-Directory $Path
-							Write-PwrHost 'done.'
+							Write-PwrHost 'done'
 						}
 					} else {
-						Write-PwrOutput -ForegroundColor Red "$($Pkg.Ref) not found"
+						Write-PwrFatal "$($Pkg.Ref) not found"
 					}
 				}
 			}
