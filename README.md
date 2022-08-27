@@ -144,9 +144,12 @@ An `auths.json` might look like:
 		-Run <String>
 			Executes the user-defined script inside a shell session
 			The script is declared like `{ ..., "scripts": { "name": "something to run" } }` in 'pwr.json'
-			The command string is interpreted by the String.Format method, so characters such as '{' and '}' need to be escaped by '{{' and '}}' respectively
-			Additional arguments may also be provided to the script, referenced in the script as {1}, {2}, etc.
-			For instance, a parameterized script is declared like `{ ..., "scripts": { "name": "something to run --arg={1}" } }` in 'pwr.json'
+			To specify a script with parameters, declare it like `{ ..., "scripts": { "name": { "format": "something to run --arg={1}" } } }` in 'pwr.json'
+			Arguments may be provided to the formatted script, referenced in the format as {1}, {2}, etc. ({0} refers to the script name)
+			The format is interpreted by the string.Format method, with the values specified after the name of script
+			Note: characters such as '{' and '}' need to be escaped by '{{' and '}}' respectively
+			To specify a formatted script with default arguments, declare it like `{ ..., "scripts": { "name": { "format": "{0} {1}", "args": ["first"] } } }`
+			These default arguments will be overridden by any value specified after the name of script, in the order provided
 
 ## Examples
 
@@ -157,3 +160,20 @@ Configuring a development shell
 Listing available packages
 
 	pwr list
+
+### Example Scripts
+
+```json
+{
+	"script": {
+		"ls-path": "$env:Path",
+		"ls": {
+			"format": "{0} -File"
+		},
+		"git-log": {
+			"args": ["main"],
+			"format": "git log {1}"
+		}
+	}
+}
+```
