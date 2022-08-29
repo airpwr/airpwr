@@ -12,10 +12,13 @@
 	shell, sh		Configures the terminal with the listed packages and starts a session
 	exit			Ends the session and restores the previous terminal state
 	load			Loads packages into the terminal transparently to shell sessions
+	home			Displays the pwr home path
 	help, h			Displays syntax and descriptive information for calling pwr
 	version, v		Displays this verion of pwr
 	remove, rm		Removes package data from the local machine
 	update			Updates the pwr command to the latest version
+	which			Displays the package version and digest
+	where			Displays the package install path
 .PARAMETER Packages
 	A list of packages and their versions to be used in the fetch or shell command
 	Must be in the form name[:version][:configuration]
@@ -46,8 +49,8 @@
 .PARAMETER Silent
 	Suppresses all output to stdout and stderr
 .PARAMETER AssertMinimum
-	Writes an error if the provided semantic version (a.b.c) is not met by this scripts version
-	Must be called with the `version` command
+	Writes an error if the provided semantic version (a.b.c) is later than the pwr version
+	Must be used in conjunction with the 'version' command
 .PARAMETER Override
 	Overrides 'pwr.json' package versions with the versions provided by the `Packages` parameter
 	The package must be declared in the configuration file
@@ -279,7 +282,7 @@ function Get-RepoTags($Repo) {
 	return [string]$Resp | ConvertFrom-Json
 }
 
-function Resolve-PwrPackge($Pkg) {
+function Resolve-PwrPackage($Pkg) {
 	if ($Pkg.Local) {
 		return $Pkg.Path
 	} else {
@@ -434,7 +437,7 @@ function Get-PwrPackages {
 }
 
 function Test-PwrPackage($Pkg) {
-	$PkgPath = Resolve-PwrPackge $Pkg
+	$PkgPath = Resolve-PwrPackage $Pkg
 	return Test-Path "$PkgPath\.pwr"
 }
 
@@ -446,7 +449,7 @@ function Invoke-PwrPackagePull($Pkg) {
 	} else {
 		Write-PwrOutput "fetching $($Pkg.Ref)"
 		$Manifest = Get-ImageManifest $Pkg
-		$PkgPath = Resolve-PwrPackge $Pkg
+		$PkgPath = Resolve-PwrPackage $Pkg
 		mkdir $PkgPath -Force | Out-Null
 		$Job = @()
 		foreach ($Layer in $Manifest.Layers) {
@@ -466,7 +469,7 @@ function Receive-PwrJob($Job, $Pkgs) {
 }
 
 function Invoke-PwrPackageShell($Pkg) {
-	$PkgPath = Resolve-PwrPackge $Pkg
+	$PkgPath = Resolve-PwrPackage $Pkg
 	if ($Offline -and -not (Test-PwrPackage $Pkg)) {
 		Write-PwrThrow "cannot resolve package $($Pkg.Ref) while running offline"
 	}
@@ -795,7 +798,7 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.25'
+$env:PwrVersion = '0.4.26'
 
 if (-not $Run) {
 	switch ($Command) {
@@ -810,6 +813,9 @@ if (-not $Run) {
 				Write-PwrOutput "version $env:PwrVersion"
 			}
 			exit
+		}
+		'home' {
+			Write-PwrHost $PwrPath
 		}
 		{$_ -in '', 'h', 'help'} {
 			Get-Help $MyInvocation.MyCommand.Path -Detailed
@@ -958,7 +964,7 @@ switch ($Command) {
 			if (-not (Test-PwrPackage $Pkg)) {
 				Write-PwrFatal "package $($Pkg.Ref) is not installed"
 			}
-			$local:PkgPath = Resolve-PwrPackge $Pkg
+			$local:PkgPath = Resolve-PwrPackage $Pkg
 			$local:PwrCfg = Get-Content -Raw "$local:PkgPath\.pwr" | ConvertFrom-Json | ConvertTo-HashTable
 			Write-PwrHost "$($Pkg.Ref)"
 			$local:Configs = @('default')
@@ -1036,7 +1042,7 @@ switch ($Command) {
 					} elseif (Test-PwrPackage $Pkg) {
 						if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
 							Write-PwrOutput "removing $($Pkg.Ref) ... " -NoNewline
-							$Path = Resolve-PwrPackge $Pkg
+							$Path = Resolve-PwrPackage $Pkg
 							Remove-Directory $Path
 							Write-PwrHost 'done'
 						}
@@ -1047,6 +1053,23 @@ switch ($Command) {
 			}
 		} finally {
 			Unlock-PwrLock
+		}
+	}
+	'which' {
+		Assert-NonEmptyPwrPackages
+		foreach ($local:P in $Packages) {
+			$local:Pkg = Assert-PwrPackage $local:P
+			Write-PwrHost "$($local:Pkg.Ref) $($local:Pkg.Digest)"
+		}
+	}
+	'where' {
+		Assert-NonEmptyPwrPackages
+		foreach ($local:P in $Packages) {
+			$local:Pkg = Assert-PwrPackage $local:P
+			if (-not (Test-PwrPackage $local:Pkg)) {
+				Write-PwrFatal "package $($local:Pkg.Ref) is not installed"
+			}
+			Write-PwrHost (Resolve-PwrPackage $local:Pkg)
 		}
 	}
 	Default {
