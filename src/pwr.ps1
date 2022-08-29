@@ -622,7 +622,7 @@ function Get-InstalledPwrPackages {
 			$Pkgs.$Pkg = @($Pkgs.$Pkg) + @([SemanticVersion]::new($Ver)) | Sort-Object -Descending
 		}
 	}
-	return New-Object PSObject -Property $Pkgs
+	return $Pkgs
 }
 
 function Format-PwrPackages([parameter(ValueFromPipeline=$True)]$Packages) {
@@ -820,7 +820,7 @@ function Get-PwrConfig {
 
 function Lock-PwrLock {
 	try {
-		New-Item $PwrLock -ItemType File | Out-Null
+		New-Item $PwrLock -ItemType File -WhatIf:$false | Out-Null
 	} catch {
 		Write-PwrFatal "already fetching or removing package`n     if this isn't the case, manually delete $PwrLock"
 	}
@@ -828,7 +828,7 @@ function Lock-PwrLock {
 
 function Unlock-PwrLock {
 	try {
-		Remove-Item $PwrLock
+		Remove-Item $PwrLock -WhatIf:$false
 	} catch {
 		Write-PwrWarning "lock file $PwrLock could not be removed`n     ensure this file does not exist before running pwr again"
 	}
@@ -934,7 +934,7 @@ switch ($Command) {
 	}
 	{$_ -in 'ls', 'list'} {
 		if ($Installed) {
-			Get-InstalledPwrPackages | Format-PwrPackages
+			New-Object PSObject -Property (Get-InstalledPwrPackages) | Format-PwrPackages
 			break
 		}
 		foreach ($Repo in $PwrRepositories) {
