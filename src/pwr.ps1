@@ -751,7 +751,11 @@ function Invoke-PwrScripts {
 				} elseif ($Format -isnot [string]) {
 					Write-PwrFatal "wrong JSON type for value of 'format', expected string"
 				}
-				$RunCmd = [string]::Format($Format, [object[]]$FormatArgs)
+				try {
+					$RunCmd = [string]::Format($Format, [object[]]$FormatArgs)
+				} catch {
+					Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$Format', see below`n     $_"
+				}
 			} elseif ($RunCmd -isnot [string]) {
 				Write-PwrFatal "wrong JSON type for value of '$Name', expected string or object"
 			}
