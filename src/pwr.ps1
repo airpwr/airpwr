@@ -62,9 +62,12 @@
 .PARAMETER Run
 	Executes the user-defined script inside a shell session
 	The script is declared like `{ ..., "scripts": { "name": "something to run" } }` in 'pwr.json'
-	The command string is interpreted by the String.Format method, so characters such as '{' and '}' need to be escaped by '{{' and '}}' respectively
-	Additional arguments may also be provided to the script, referenced in the script as {1}, {2}, etc.
-	For instance, a parameterized script is declared like `{ ..., "scripts": { "name": "something to run --arg={1}" } }` in 'pwr.json'
+	To specify a script with parameters, declare it like `{ ..., "scripts": { "name": { "format": "something to run --arg={1}" } } }` in 'pwr.json'
+	Arguments may be provided to the formatted script, referenced in the format as {1}, {2}, etc. ({0} refers to the script name)
+	The format is interpreted by the string.Format method, with the values specified after the name of script
+	Note: characters such as '{' and '}' need to be escaped by '{{' and '}}' respectively
+	To specify a formatted script with default arguments, declare it like `{ ..., "scripts": { "name": { "format": "{0} {1}", "args": ["first"] } } }`
+	These default arguments will be overridden by any value specified after the name of script, in the order provided
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param (
@@ -215,7 +218,7 @@ function ConvertTo-HashTable {
 	$Table = @{}
 	$Object.PSObject.Properties | ForEach-Object {
 		$V = $_.Value
-		if ($V -is [array]) {
+		if ($V -is [Array]) {
 			$V = [System.Collections.ArrayList]$V
 		} elseif ($V -is [PSCustomObject]) {
 			$V = ($V | ConvertTo-HashTable)
@@ -705,7 +708,7 @@ function Enter-Shell {
 		$Pwr = Split-Path $script:MyInvocation.MyCommand.Path -Parent
 		$env:Path = "$env:Path;$Pwr"
 	}
-	$env:Path = "$env:Path;\windows;\windows\system32;\windows\system32\windowspowershell\v1.0"
+	$env:Path = "$(if ($env:Path.Length -gt 0) { "$env:Path;" })$env:HOMEDRIVE\Windows;$env:HOMEDRIVE\Windows\System32;$env:HOMEDRIVE\Windows\System32\WindowsPowerShell\v1.0"
 }
 
 function Exit-Shell {
@@ -721,8 +724,41 @@ function Exit-Shell {
 function Invoke-PwrScripts {
 	if ($PwrConfig.Scripts) {
 		$Name = $Run[0]
-		if ($PwrConfig.Scripts.$Name) {
-			$RunCmd = [String]::Format($PwrConfig.Scripts.$Name, [object[]]$Run)
+		$RunCmd = $PwrConfig.Scripts.$Name
+		if ($RunCmd) {
+			if ($RunCmd -is [PSCustomObject]) {
+				$FormatArgs = @($Name)
+				if ($RunCmd.Args -is [Array]) {
+					foreach ($A in $RunCmd.Args) {
+						if ($A -isnot [string]) {
+							Write-PwrFatal "wrong JSON type for item of array 'args', expected string"
+						}
+						$FormatArgs += $A
+					}
+				} elseif ($RunCmd.Args) {
+					Write-PwrFatal "wrong JSON type for value of 'args', expected array"
+				}
+				for ($I = 1; $I -lt $Run.Count; ++$I) {
+					if ($I -lt $FormatArgs.Count) {
+						$FormatArgs[$I] = $Run[$I]
+					} else {
+						$FormatArgs += $Run[$I]
+					}
+				}
+				$Format = $RunCmd.Format
+				if (-not $Format) {
+					Write-PwrFatal "missing JSON key 'format' in script '$Name', expected string"
+				} elseif ($Format -isnot [string]) {
+					Write-PwrFatal "wrong JSON type for value of 'format', expected string"
+				}
+				try {
+					$RunCmd = [string]::Format($Format, [object[]]$FormatArgs)
+				} catch {
+					Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$Format', see below`n     $_"
+				}
+			} elseif ($RunCmd -isnot [string]) {
+				Write-PwrFatal "wrong JSON type for value of '$Name', expected string or object"
+			}
 			if ($env:PwrShellPackages) {
 				Write-PwrFatal "cannot invoke script due to shell session already in progress"
 			}
@@ -731,8 +767,10 @@ function Invoke-PwrScripts {
 			} catch {
 				exit 1
 			}
+			$ScriptExitCode = $global:LASTEXITCODE = 0
 			try {
 				Invoke-Expression $RunCmd
+				$ScriptExitCode = $global:LASTEXITCODE
 			} catch {
 				$ErrorMessage = $_.ToString().Trim()
 			} finally {
@@ -741,7 +779,9 @@ function Invoke-PwrScripts {
 				}
 			}
 			if ($ErrorMessage) {
-				Write-PwrFatal "script '$Name' failed to execute$(if ($ErrorMessage.Length -gt 0) { ', ' + $ErrorMessage.Substring(0, 1).ToLower() + $ErrorMessage.Substring(1) })"
+				Write-PwrFatal "script '$Name' failed to execute command '$RunCmd'`n     $(foreach ($Line in $ErrorMessage.Split("`r`n")) { '>> ' + $Line })"
+			} elseif ($ScriptExitCode -ne 0) {
+				Write-PwrFatal "script '$Name' finished with non-zero exit value $ScriptExitCode`n     see output above for command '$RunCmd'"
 			}
 		} else {
 			Write-PwrFatal "no declared script '$Name'"
@@ -755,7 +795,7 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.24'
+$env:PwrVersion = '0.4.25'
 
 if (-not $Run) {
 	switch ($Command) {

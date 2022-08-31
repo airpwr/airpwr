@@ -213,10 +213,24 @@ function Test-Pwr-DefaultConfig {
 	}
 }
 
-function Test-Pwr-RunWithArg {
+function Test-Pwr-Run {
+	pwr -packages "file:///$PSScriptRoot\pkg1" -run print
+	Invoke-PwrAssertTrue {
+		$LastExitCode -eq 2
+	}
+}
+
+function Test-Pwr-RunWithArgs {
 	pwr -packages "file:///$PSScriptRoot\pkg1" -run set, 1, 2, 3
 	Invoke-PwrAssertTrue {
-		$LastExitCode -eq 0
+		$LastExitCode -eq 2
+	}
+}
+
+function Test-Pwr-RunWithDefaultArgs {
+	pwr -packages "file:///$PSScriptRoot\pkg1" -run setA
+	Invoke-PwrAssertTrue {
+		$LastExitCode -eq 2
 	}
 }
 
