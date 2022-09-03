@@ -199,7 +199,7 @@ function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing
 	if ($Offline) {
 		Write-PwrThrow 'cannot web request while running offline'
 	}
-	$Expr = "$env:HOMEDRIVE\Windows\System32\curl.exe -s -L --url '$Uri'"
+	$Expr = "$env:SYSTEMROOT\System32\curl.exe -s -L --url '$Uri'"
 	foreach ($K in $Headers.Keys) {
 		$Expr += " --header '${K}: $($Headers.$K)'"
 	}
@@ -266,7 +266,7 @@ function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 	}
 	return Start-Job -ScriptBlock {
 		$Tmp, $Out = $Args
-		& "$env:HOMEDRIVE\Windows\System32\tar.exe" -xzf $Tmp -C $Out --exclude 'Hives/*' --strip-components 1
+		& "$env:SYSTEMROOT\System32\tar.exe" -xzf $Tmp -C $Out --exclude 'Hives/*' --strip-components 1
 		Remove-Item $Tmp
 	} -ArgumentList $Tmp, $Out
 }
@@ -711,7 +711,7 @@ function Enter-Shell {
 		$Pwr = Split-Path $script:MyInvocation.MyCommand.Path -Parent
 		$env:Path = "$env:Path;$Pwr"
 	}
-	$env:Path = "$(if ($env:Path.Length -gt 0) { "$env:Path;" })$env:HOMEDRIVE\Windows;$env:HOMEDRIVE\Windows\System32;$env:HOMEDRIVE\Windows\System32\WindowsPowerShell\v1.0"
+	$env:Path = "$(if ($env:Path.Length -gt 0) { "$env:Path;" })$env:SYSTEMROOT;$env:SYSTEMROOT\System32;$env:SYSTEMROOT\System32\WindowsPowerShell\v1.0"
 }
 
 function Exit-Shell {
