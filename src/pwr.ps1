@@ -816,6 +816,7 @@ if (-not $Run) {
 		}
 		'home' {
 			Write-PwrHost $PwrPath
+			exit
 		}
 		{$_ -in '', 'h', 'help'} {
 			Get-Help $MyInvocation.MyCommand.Path -Detailed
