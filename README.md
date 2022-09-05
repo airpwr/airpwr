@@ -82,6 +82,23 @@ An `auths.json` might look like:
 }
 ```
 
+# Commands
+
+## Prune
+
+Removes all packages from `<pwr home>\pkg` that are out-of-date. Configure what packages should be considered "out-of-date" through the `<pwr home>\prune.json` file. As an example, the file might look like this:
+
+```json
+{
+	"*": "latest",
+	"jdk": "major",
+	"jre": "major",
+	"python": "minor"
+}
+```
+
+The `prune.json` file describes the compatibility between different versions of the packages. For instance, `jdk:8` is not strictly compatible with `jdk:11`, whereas, `python:3.9` and `python:3.10` are not strictly compatible with each other. Other packages you might only want the latest version to be retained, e.g. `windows-terminal:latest`. Acceptable values are `latest`, `major`, `minor`, `patch`, and `build`. Using `build` for a package will disable pruning for that package. The wildcard `"*"` must be provided when any fetched package is not specified in `prune.json`, otherwise it may be omitted in cases where the user provides explicit rules for every package.
+
 # Usage
 
 	SYNTAX
@@ -98,8 +115,9 @@ An `auths.json` might look like:
 			home			Displays the pwr home path
 			help, h			Displays syntax and descriptive information for calling pwr
 			version, v		Displays this verion of pwr
-			remove, rm		Removes package data from the local machine
 			update			Updates the pwr command to the latest version
+			remove, rm		Removes package data from the local machine
+			prune			Removes out-of-date packages from the local machine
 			which			Displays the package version and digest
 			where			Displays the package install path
 

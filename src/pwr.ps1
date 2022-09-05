@@ -15,8 +15,9 @@
 	home			Displays the pwr home path
 	help, h			Displays syntax and descriptive information for calling pwr
 	version, v		Displays this verion of pwr
-	remove, rm		Removes package data from the local machine
 	update			Updates the pwr command to the latest version
+	remove, rm		Removes package data from the local machine
+	prune			Removes out-of-date packages from the local machine
 	which			Displays the package version and digest
 	where			Displays the package install path
 .PARAMETER Packages
@@ -77,7 +78,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param (
 	[Parameter(Position = 0)]
-	[ValidateSet('v', 'version', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'rm', 'remove', 'which', 'where')]
+	[ValidateSet('v', 'version', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'rm', 'remove', 'prune', 'which', 'where')]
 	[string]$Command,
 	[Parameter(Position = 1)]
 	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]+)|latest|(?=:))(:([a-zA-Z0-9_-]+))?)?))$')]
@@ -177,6 +178,10 @@ Class SemanticVersion : System.IComparable {
 
 	[bool]LaterThan([object]$Obj) {
 		return $this.CompareTo($Obj) -gt 0
+	}
+
+	[bool]Equals([object]$Obj) {
+		return $This.CompareTo($Obj) -eq 0
 	}
 
 	[int]CompareTo([object]$Obj) {
@@ -662,7 +667,7 @@ function Get-PwrRepositories {
 			}
 		}
 		$Repository = @{
-			URI = $Uri
+			Uri = $Uri
 			Scope = $Uri.Substring($Uri.IndexOf('/v2/') + 4)
 			Hash = Get-StringHash $Uri
 		}
@@ -1239,6 +1244,89 @@ switch ($Command) {
 					}
 				}
 			}
+		} finally {
+			Unlock-PwrLock
+		}
+	}
+	'prune' {
+		$PwrPrunePath = "$PwrPath\prune.json"
+		if (Test-Path $PwrPrunePath -PathType Leaf) {
+			try {
+				$PruneRules = Get-Content $PwrPrunePath | ConvertFrom-Json | ConvertTo-Hashtable
+			} catch {
+				Write-PwrFatal "failed to read prune rules from $PwrPrunePath`n     $_"
+			}
+		} else {
+			Write-PwrFatal "no prune rules at $PwrPrunePath"
+		}
+		foreach ($R in $PruneRules.Keys) {
+			$Rule = $PruneRules.$R
+			switch ($Rule) {
+				{$_ -notin 'latest', 'major', 'minor', 'patch', 'build'} {
+					Write-PwrFatal "unknown enumerated value '$_' in rule of $R in $PwrPrunePath"
+				}
+			}
+			if ($R -eq '*') {
+				$WildcardRule = $Rule
+			} else {
+				$Pkg = foreach ($Repo in $PwrRepositories) { $Repo.Packages.$R }
+				if (-not $Pkg) {
+					Write-PwrFatal "no package '$R' in $($Repos = foreach ($Repo in $PwrRepositories) { $Repo.Uri }; $Repos -join ', ')"
+				}
+			}
+		}
+		Lock-PwrLock
+		try {
+			$Pkgs = Get-InstalledPwrPackages
+			$PkgVers = foreach ($Name in $Pkgs.Keys) {
+				@{$Name = foreach ($Ver in $Pkgs.$Name) { [SemanticVersion]::new($Ver) }}
+			}
+			$Pruned = @()
+			foreach ($Name in $PkgVers.Keys) {
+				$Rule = if ($PruneRules.$Name) {
+					$PruneRules.$Name
+				} else {
+					if (-not $WildcardRule) {
+						Write-PwrFatal "no rule for $Name`n     must define an exact or wildcard rule (`"*`") in $PwrPrunePath"
+					}
+					$WildcardRule
+				}
+				Write-PwrDebug "pruning package $Name by rule $Rule"
+				$Prev = $null
+				foreach ($Ver in $PkgVers.$Name | Sort-Object -Descending) {
+					Write-Host "$Name $Ver"
+					$RemovePkg = switch ($Rule) {
+						'latest' {
+							$true
+						}
+						'major' {
+							$Ver.Major -eq $Prev.Major
+						}
+						'minor' {
+							($Ver.Major -eq $Prev.Major) -and ($Ver.Minor -eq $Prev.Minor)
+						}
+						'patch' {
+							($Ver.Major -eq $Prev.Major) -and ($Ver.Minor -eq $Prev.Minor) -and ($Ver.Patch -eq $Prev.Patch)
+						}
+						'build' {
+							$false
+						}
+					}
+					if ($Prev -and $RemovePkg) {
+						$PkgRoot = "$PwrPkgPath\$Name-$Ver"
+						if (-not (Test-Path "$PkgRoot\.pwr" -PathType Leaf)) {
+							Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
+						} elseif ($PSCmdlet.ShouldProcess("${Name}:$Ver", 'remove pwr package')) {
+							Write-PwrOutput "removing ${Name}:$Ver ... " -NoNewline
+							Remove-Directory $PkgRoot
+							Write-PwrHost 'done'
+							$Pruned += "${Name}:$Ver"
+						}
+					}
+					$Prev = $Ver
+				}
+			}
+			Write-PwrOutput "pruned $($Pruned.Count) package$(if ($Pruned.Count -ne 1) { 's' })$(if ($Pruned) { " ($($Pruned -join ', '))" })"
 		} finally {
 			Unlock-PwrLock
 		}
