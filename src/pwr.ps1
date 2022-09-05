@@ -75,6 +75,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param (
 	[Parameter(Position = 0)]
+	[ValidateSet('v', 'version', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'rm', 'remove', 'which', 'where')]
 	[string]$Command,
 	[Parameter(Position = 1)]
 	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]+)|latest|(?=:))(:([a-zA-Z0-9_-]+))?)?))$')]
@@ -790,7 +791,7 @@ function Invoke-PwrScripts {
 			Write-PwrFatal "no declared script '$Name'"
 		}
 	} else {
-		Write-PwrFatal "no scripts declared in $PwrConfig"
+		Write-PwrFatal "no scripts declared in $PwrConfigPath"
 	}
 }
 
@@ -1074,6 +1075,6 @@ switch ($Command) {
 		}
 	}
 	Default {
-		Write-PwrFatal "no such command '$Command'`n     use 'pwr help' for a list of commands"
+		Write-PwrFatal "no such command '$Command'"
 	}
 }
