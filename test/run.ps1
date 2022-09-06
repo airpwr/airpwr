@@ -15,7 +15,7 @@ function Invoke-PwrAssertTrue($block) {
 function Invoke-PwrAssertThrows($block) {
 	$LASTEXITCODE = $null
 	try {
-		Invoke-Command -ScriptBlock $block | Out-Null
+		Invoke-Command -ScriptBlock $block *> $null
 	} catch {
 		$LASTEXITCODE = 1
 	}

@@ -44,10 +44,12 @@
 	Otherwise, the cached repository is used and updated if older than one day
 .PARAMETER Offline
 	Prevents attempts to request a web resource
+.PARAMETER Info
+	Displays messages written to the information stream (6), otherwise the InformationPreference value is respected
 .PARAMETER Quiet
-	Suppresses all output to stdout
+	Suppresses messages written to the success stream (1), debug stream (5), and information stream (6)
 .PARAMETER Silent
-	Suppresses all output to stdout and stderr
+	Suppresses messages written to the success stream (1), error stream (2), warning stream (3), debug stream (5), and information stream (6)
 .PARAMETER AssertMinimum
 	Writes an error if the provided semantic version (a.b.c) is later than the pwr version
 	Must be used in conjunction with the 'version' command
@@ -88,6 +90,7 @@ param (
 	[ValidatePattern('^[1-9][0-9]*$')]
 	[int]$DaysOld,
 	[switch]$Offline,
+	[switch]$Info,
 	[switch]$Quiet,
 	[switch]$Silent,
 	[switch]$Override,
@@ -103,43 +106,43 @@ Class SemanticVersion : System.IComparable {
 
 	hidden init([string]$Tag, [string]$Pattern) {
 		if ($Tag -match $Pattern) {
-			$This.Major = if ($Matches[1]) { $Matches[1] } else { 0 }
-			$This.Minor = if ($Matches[2]) { $Matches[2] } else { 0 }
-			$This.Patch = if ($Matches[3]) { $Matches[3] } else { 0 }
-			$This.Build = if ($Matches[4]) { $Matches[4].Substring(1) } else { 0 }
+			$this.Major = if ($Matches[1]) { $Matches[1] } else { 0 }
+			$this.Minor = if ($Matches[2]) { $Matches[2] } else { 0 }
+			$this.Patch = if ($Matches[3]) { $Matches[3] } else { 0 }
+			$this.Build = if ($Matches[4]) { $Matches[4].Substring(1) } else { 0 }
 		}
 	}
 
 	SemanticVersion([string]$Tag, [string]$Pattern) {
-		$This.Init($Tag, $Pattern)
+		$this.Init($Tag, $Pattern)
 	}
 
 	SemanticVersion([string]$Version) {
-		$This.Init($Version, '^([0-9]+)\.([0-9]+)\.([0-9]+)(\+[0-9]+)?$')
+		$this.Init($Version, '^([0-9]+)\.([0-9]+)\.([0-9]+)(\+[0-9]+)?$')
 	}
 
 	SemanticVersion() { }
 
 	[bool]LaterThan([object]$Obj) {
-		return $This.CompareTo($Obj) -gt 0
+		return $this.CompareTo($Obj) -gt 0
 	}
 
 	[int]CompareTo([object]$Obj) {
-		if ($Obj -isnot $This.GetType()) {
-			throw "cannot compare types $($Obj.GetType()) and $($This.GetType())"
-		} elseif ($This.Major -ne $Obj.Major) {
-			return $This.Major - $Obj.Major
-		} elseif ($This.Minor -ne $Obj.Minor) {
-			return $This.Minor - $Obj.Minor
-		} elseif ($This.Patch -ne $Obj.Patch) {
-			return $This.Patch - $Obj.Patch
+		if ($Obj -isnot $this.GetType()) {
+			throw "cannot compare types $($Obj.GetType()) and $($this.GetType())"
+		} elseif ($this.Major -ne $Obj.Major) {
+			return $this.Major - $Obj.Major
+		} elseif ($this.Minor -ne $Obj.Minor) {
+			return $this.Minor - $Obj.Minor
+		} elseif ($this.Patch -ne $Obj.Patch) {
+			return $this.Patch - $Obj.Patch
 		} else {
-			return $This.Build - $Obj.Build
+			return $this.Build - $Obj.Build
 		}
 	}
 
 	[string]ToString() {
-		return "$($This.Major).$($This.Minor).$($This.Patch)$(if ($This.Build) { "+$($This.Build)" })"
+		return "$($this.Major).$($this.Minor).$($this.Patch)$(if ($this.Build) { "+$($this.Build)" })"
 	}
 
 }
@@ -157,42 +160,108 @@ function global:Prompt {
 # Required for tar.exe and curl.exe
 if ([Environment]::OSVersion.Version.Build -lt 17063) {
 	Write-PwrFatal "windows build version $([Environment]::OSVersion.Version.Build) does not meet minimum required build version 17063`n     update windows to use pwr"
+} elseif ($PSVersionTable.PSVersion.Major -lt 5) {
+	Write-PwrFatal "powershell version $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor) does not meet minimum required version 5.0"
 }
 
-function Write-PwrOutput {
-	if (-not $Quiet -and -not $Silent) {
-		Write-Host -ForegroundColor Blue 'pwr: ' -NoNewline
-		Write-Host @Args
+$WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.OffsetInLine -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
+
+function Write-Pwr($Message, $ForegroundColor, [switch]$NoNewline, [switch]$Override) {
+	if ($WriteToHost) {
+		$PwrColor = if ($Override) { $ForegroundColor } else { 'Blue' }
+		Write-Host 'pwr: ' -ForegroundColor $PwrColor -NoNewline
+		if ($ForegroundColor) {
+			Write-Host $Message -ForegroundColor $ForegroundColor -NoNewline:$NoNewline
+		} else {
+			Write-Host $Message -NoNewline:$NoNewline
+		}
+	} else {
+		Write-Output "pwr: $Message"
 	}
 }
 
-function Write-PwrHost {
+function Write-PwrOutput($Message, $ForegroundColor, [switch]$NoNewline) {
 	if (-not $Quiet -and -not $Silent) {
-		Write-Host @Args
+		Write-Pwr $Message -ForegroundColor $ForegroundColor -NoNewline:$NoNewline
+	}
+}
+
+function Write-PwrHost($Message) {
+	if (-not $Quiet -and -not $Silent) {
+		Write-Output $Message
+	}
+}
+
+function Write-PwrInfo($Message) {
+	if (-not $Quiet -and -not $Silent) {
+		if ($WriteToHost) {
+			switch ($InformationPreference) {
+				'Continue' {
+					Write-Pwr $Message
+				}
+				'Stop' {
+					throw $Message
+				}
+			}
+		} else {
+			Write-Information "pwr: $Message" -InformationAction "$(if ($Info) { 'Continue' } else { $InformationPreference })"
+		}
 	}
 }
 
 function Write-PwrDebug($Message) {
-	Write-Debug "pwr: $Message"
+	if (-not $Quiet -and -not $Silent) {
+		if ($WriteToHost) {
+			switch ($DebugPreference) {
+				'Continue' {
+					Write-Pwr $Message
+				}
+				'Stop' {
+					throw $Message
+				}
+			}
+		} else {
+			Write-Debug "pwr: $Message"
+		}
+	}
 }
 
 function Write-PwrFatal($Message) {
 	if (-not $Silent) {
-		Write-Host -ForegroundColor Red "pwr: $Message"
+		if ($WriteToHost) {
+			Write-Pwr $Message -ForegroundColor Red -Override
+		} else {
+			Write-Error "pwr: $Message" -ErrorAction Continue
+		}
 	}
 	exit 1
 }
 
 function Write-PwrThrow($Message) {
 	if (-not $Silent) {
-		Write-Host -ForegroundColor Red "pwr: $Message"
+		if ($WriteToHost) {
+			Write-Pwr $Message -ForegroundColor Red -Override
+		} else {
+			Write-Error "pwr: $Message" -ErrorAction Continue
+		}
 	}
 	throw $Message
 }
 
 function Write-PwrWarning($Message) {
 	if (-not $Silent) {
-		Write-Host -ForegroundColor Yellow "pwr: $Message"
+		if ($WriteToHost) {
+			switch ($WarningPreference) {
+				'Continue' {
+					Write-Pwr $Message -ForegroundColor Yellow -Override
+				}
+				'Stop' {
+					throw $Message
+				}
+			}
+		} else {
+			Write-Warning "pwr: $Message"
+		}
 	}
 }
 
@@ -259,7 +328,7 @@ function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 		}
 		Invoke-PwrWebRequest "$($Repo.Uri)/blobs/$Digest" -OutFile $Tmp -Headers $Headers
 	} else {
-		Write-PwrDebug "using cache for $Ref"
+		Write-PwrInfo "using cache for $Ref"
 	}
 	$Hash = "sha256:$((Get-FileHash -Path $Tmp -Algorithm SHA256).Hash)"
 	if (-not (Test-Path -Path $Tmp -PathType Leaf) -or $Hash -ne $Digest) {
@@ -392,9 +461,9 @@ function Compare-PwrTags {
 			$Latest = $Ver
 		}
 	}
-	if ($Latest.LaterThan([SemanticVersion]::new($env:PwrVersion))) {
-		Write-PwrOutput -ForegroundColor Green "a new version ($Latest) is available!"
-		Write-PwrOutput -ForegroundColor Green "use command 'update' to install"
+	if ($Latest.LaterThan([SemanticVersion]::new([string]$env:PwrVersion))) {
+		Write-PwrOutput "a new version ($Latest) is available!" -ForegroundColor Green
+		Write-PwrOutput "use command 'update' to install" -ForegroundColor Green
 	}
 }
 
@@ -407,10 +476,10 @@ function Get-PwrPackages {
 			$OutOfDate = [DateTime]::Compare((Get-Date), $LastWrite + (New-TimeSpan -Days 1)) -gt 0
 		}
 		if ($Offline) {
-			Write-PwrOutput 'skipping fetch tags while running offline'
+			Write-PwrInfo 'skipping fetch tags while running offline'
 		} elseif (-not $CacheExists -or $OutOfDate -or $Fetch) {
 			try {
-				Write-PwrOutput "fetching tags from $($Repo.Uri)"
+				Write-PwrInfo "fetching tags from $($Repo.Uri)"
 				$TagList = Get-RepoTags $Repo
 				$Pkgs = @{}
 				$Names = @{}
@@ -428,7 +497,7 @@ function Get-PwrPackages {
 				mkdir (Split-Path $Cache -Parent) -Force | Out-Null
 				[IO.File]::WriteAllText($Cache, (ConvertTo-Json $Pkgs -Depth 50 -Compress))
 			} catch {
-				Write-PwrOutput -ForegroundColor Red "failed to fetch tags from $($Repo.Uri)"
+				Write-PwrOutput "failed to fetch tags from $($Repo.Uri)" -ForegroundColor Red
 				Write-Debug "    > $($Error[0])"
 			}
 		}
@@ -504,7 +573,7 @@ function Assert-NonEmptyPwrPackages {
 	if ($Packages.Count -gt 0) {
 		return
 	} elseif ($PwrConfig.Packages.Count -gt 0) {
-		Write-PwrDebug "using config at $PwrConfigPath"
+		Write-PwrInfo "using config at $PwrConfigPath"
 		$script:Packages = $PwrConfig.Packages
 	} elseif ($PwrConfig) {
 		Write-PwrFatal "no packages declared in $PwrConfigPath"
@@ -659,7 +728,7 @@ function Resolve-PwrPackageOverrides {
 				Write-PwrFatal "tried to override local package $P"
 			}
 			$Over = "$($Pkg.Name):$($Pkg.Version):$($Pkg.Config)"
-			Write-PwrDebug "overriding $P with $Over"
+			Write-PwrInfo "overriding $P with $Over"
 			$Pkgs += $Over
 			$PkgOverride.Remove($Pkg.Name)
 		} else {
@@ -683,6 +752,7 @@ function Enter-Shell {
 	Assert-NonEmptyPwrPackages
 	Lock-PwrLock
 	try {
+		$Job = $Pkgs = $PwrPkgs = @()
 		foreach ($P in $Packages) {
 			$Pkg = Assert-PwrPackage $P
 			if (-not (Test-PwrPackage $Pkg)) {
@@ -796,17 +866,16 @@ function Invoke-PwrScripts {
 }
 
 $ProgressPreference = 'SilentlyContinue'
-$ErrorActionPreference = 'Stop'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.26'
+$env:PwrVersion = '0.4.27'
 
 if (-not $Run) {
 	switch ($Command) {
 		{$_ -in 'v', 'version'} {
 			if ($AssertMinimum) {
-				$local:CurVer = [SemanticVersion]::new([string]"$env:PwrVersion")
-				$local:MinVer = [SemanticVersion]::new([string]"$AssertMinimum")
+				$local:CurVer = [SemanticVersion]::new([string]$env:PwrVersion)
+				$local:MinVer = [SemanticVersion]::new([string]$AssertMinimum)
 				if ($CurVer.CompareTo($MinVer) -lt 0) {
 					Write-PwrFatal "$env:PwrVersion does not meet the minimum version $AssertMinimum"
 				}
@@ -901,6 +970,7 @@ switch ($Command) {
 		Assert-NonEmptyPwrPackages
 		Lock-PwrLock
 		try {
+			$Job = $Pkgs = @()
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
 				if ($Pkg.Local) {
@@ -934,7 +1004,7 @@ switch ($Command) {
 			}
 			Receive-PwrJob $Job $Pkgs
 			foreach ($Pkg in $PwrPkgs) {
-				if (-not "$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
+				if (-not ${env:PwrLoadedPackages}.Contains($Pkg.Ref)) {
 					Invoke-PwrPackageShell $Pkg
 					$env:PwrLoadedPackages = "$($Pkg.Ref) $env:PwrLoadedPackages"
 					Write-PwrOutput "loaded $($Pkg.Ref)"
@@ -1037,9 +1107,9 @@ switch ($Command) {
 					$Pkg = Assert-PwrPackage $P
 					if ($Pkg.Local) {
 						Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
-					} elseif ("$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
+					} elseif (${env:PwrLoadedPackages}.Contains($Pkg.Ref)) {
 						Write-PwrFatal "tried to remove loaded package $($Pkg.Ref)"
-					} elseif ("$env:PwrShellPackages".Contains($Pkg.Ref)) {
+					} elseif (${env:PwrShellPackages}.Contains($Pkg.Ref)) {
 						Write-PwrFatal "tried to remove shell session package $($Pkg.Ref)"
 					} elseif (Test-PwrPackage $Pkg) {
 						if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
