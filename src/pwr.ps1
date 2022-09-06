@@ -461,7 +461,7 @@ function Compare-PwrTags {
 			$Latest = $Ver
 		}
 	}
-	if ($Latest.LaterThan([SemanticVersion]::new([string]$env:PwrVersion))) {
+	if ($Latest.LaterThan([SemanticVersion]::new("$env:PwrVersion"))) {
 		Write-PwrOutput "a new version ($Latest) is available!" -ForegroundColor Green
 		Write-PwrOutput "use command 'update' to install" -ForegroundColor Green
 	}
@@ -874,8 +874,8 @@ if (-not $Run) {
 	switch ($Command) {
 		{$_ -in 'v', 'version'} {
 			if ($AssertMinimum) {
-				$local:CurVer = [SemanticVersion]::new([string]$env:PwrVersion)
-				$local:MinVer = [SemanticVersion]::new([string]$AssertMinimum)
+				$local:CurVer = [SemanticVersion]::new("$env:PwrVersion")
+				$local:MinVer = [SemanticVersion]::new($AssertMinimum)
 				if ($CurVer.CompareTo($MinVer) -lt 0) {
 					Write-PwrFatal "$env:PwrVersion does not meet the minimum version $AssertMinimum"
 				}
@@ -906,7 +906,7 @@ if (-not $Run) {
 				if (-not $UserPath.Contains($PwrCmd)) {
 					[Environment]::SetEnvironmentVariable('Path', "$UserPath;$PwrCmd", 'User')
 				}
-				if (-not ${env:Path}.Contains($PwrCmd)) {
+				if (-not "$env:Path".Contains($PwrCmd)) {
 					$env:Path = "$env:Path;$PwrCmd"
 				}
 				& "$PwrCmd\pwr.ps1" version
@@ -1004,7 +1004,7 @@ switch ($Command) {
 			}
 			Receive-PwrJob $Job $Pkgs
 			foreach ($Pkg in $PwrPkgs) {
-				if (-not ${env:PwrLoadedPackages}.Contains($Pkg.Ref)) {
+				if (-not "$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
 					Invoke-PwrPackageShell $Pkg
 					$env:PwrLoadedPackages = "$($Pkg.Ref) $env:PwrLoadedPackages"
 					Write-PwrOutput "loaded $($Pkg.Ref)"
@@ -1107,9 +1107,9 @@ switch ($Command) {
 					$Pkg = Assert-PwrPackage $P
 					if ($Pkg.Local) {
 						Write-PwrFatal "tried to remove local package $($Pkg.Ref)"
-					} elseif (${env:PwrLoadedPackages}.Contains($Pkg.Ref)) {
+					} elseif ("$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
 						Write-PwrFatal "tried to remove loaded package $($Pkg.Ref)"
-					} elseif (${env:PwrShellPackages}.Contains($Pkg.Ref)) {
+					} elseif ("$env:PwrShellPackages".Contains($Pkg.Ref)) {
 						Write-PwrFatal "tried to remove shell session package $($Pkg.Ref)"
 					} elseif (Test-PwrPackage $Pkg) {
 						if ($PSCmdlet.ShouldProcess($Pkg.Ref, 'remove pwr package')) {
