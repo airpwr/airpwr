@@ -82,10 +82,13 @@ An `auths.json` might look like:
 			shell, sh		Configures the terminal with the listed packages and starts a session
 			exit			Ends the session and restores the previous terminal state
 			load			Loads packages into the terminal transparently to shell sessions
+			home			Displays the pwr home path
 			help, h			Displays syntax and descriptive information for calling pwr
 			version, v		Displays this verion of pwr
 			remove, rm		Removes package data from the local machine
 			update			Updates the pwr command to the latest version
+			which			Displays the package version and digest
+			where			Displays the package install path
 
 		-Packages <String[]>
 			A list of packages and their versions to be used in the fetch or shell command
@@ -123,8 +126,8 @@ An `auths.json` might look like:
 			Suppresses all output to stdout and stderr
 
 		-AssertMinimum <String>
-			Writes an error if the provided semantic version (a.b.c) is not met by this scripts version
-			Must be called with the `version` command
+			Writes an error if the provided semantic version (a.b.c) is later than the pwr version
+			Must be used in conjunction with the 'version' command
 
 		-Override [<SwitchParameter>]
 			Overrides 'pwr.json' package versions with the versions provided by the `Packages` parameter
