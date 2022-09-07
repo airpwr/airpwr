@@ -6,21 +6,31 @@ A package manager and environment to provide consistent tooling for software tea
 
 # Requirements
 
-`pwr` requires the use of `C:\Windows\System32\curl.exe` and `C:\Windows\System32\tar.exe`, which are only availble on Windows builds greater than `17063`.
+`pwr` requires the use of `$env:SystemDrive\Windows\System32\curl.exe` and `$env:SystemDrive\Windows\System32\tar.exe`, which are only available on Windows builds greater than `17063`.
 
 Use the following command in a `powershell` terminal to determine your build version.
 
 	[Environment]::OSVersion.Version
 
+PowerShell version 5.0+ is required. Windows 10 and 11 have version 5.1 installed by default.
+
+Use the following command in a `powershell` terminal to determine your PowerShell version.
+
+	$PSVersionTable.PSVersion
+
 # Installing
 
-## Powershell (recommended)
+## PowerShell (recommended)
 
-Open a powershell terminal and execute the following command:
+Open a `powershell` terminal and execute the following command:
 
 	iex (iwr 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1' -UseBasicParsing)
 
 The installer downloads the `pwr` cmdlet and puts its location on the user path.
+
+Run the `pwr` command afterwards to confirm that the installation was successful.
+
+	pwr help
 
 ## Manually
 
@@ -28,7 +38,7 @@ Save the `pwr.ps1` cmdlet to a file on your machine (`$env:AppData\pwr\cmd` is r
 
 # Configuration
 
-`pwr` can be configured entirely through the command line syntax; however, for convenience and to enable *Configuration as Code*, a file named `pwr.json` in the current or any parent directory is supported.
+`pwr` can be configured entirely through its command line syntax; however, for convenience and to enable *Configuration as Code*, a file named `pwr.json` in the current or any parent directory is supported.
 
 `pwr.json` file's contents might look like:
 
@@ -48,6 +58,8 @@ Save the `pwr.ps1` cmdlet to a file on your machine (`$env:AppData\pwr\cmd` is r
 }
 ```
 
+For additional examples of the `scripts` object, see the [Example Scripts](#example-scripts) section.
+
 ## Environment Variables
 
 Name | Default Value | Description
@@ -61,6 +73,7 @@ When a repository or registry needs authetication, `pwr` will look for an `auths
 > Note: Public repositories on Docker Hub do not need to be specified
 
 An `auths.json` might look like:
+
 ```json
 {
   "example.com/registry": {
@@ -119,11 +132,14 @@ An `auths.json` might look like:
 		-Offline [<SwitchParameter>]
 			Prevents attempts to request a web resource
 
+		-Info [<SwitchParameter>]
+			Displays messages written to the information stream (6), otherwise the InformationPreference value is respected
+
 		-Quiet [<SwitchParameter>]
-			Suppresses all output to stdout
+			Suppresses messages written to the success stream (1), debug stream (5), and information stream (6)
 
 		-Silent [<SwitchParameter>]
-			Suppresses all output to stdout and stderr
+			Suppresses messages written to the success stream (1), error stream (2), warning stream (3), debug stream (5), and information stream (6)
 
 		-AssertMinimum <String>
 			Writes an error if the provided semantic version (a.b.c) is later than the pwr version
@@ -165,6 +181,8 @@ Listing available packages
 	pwr list
 
 ### Example Scripts
+
+The `scripts` object below declares three commands: `ls-path` prints out the current `Path` environment variable, `ls` executes the `ls -File` command (`{0}` is always the command name), and `git-log` accepts an optional parameter (`{1}`) that if not provided is set to `main`.
 
 ```json
 {
