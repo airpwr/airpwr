@@ -387,19 +387,20 @@ function Split-PwrPackage($Pkg) {
 	return $Props;
 }
 
-function Get-LatestVersion($Pkgs, $Matcher) {
+function Get-LatestVersion($Pkgs, $Version) {
+	if ($Version -match '^([0-9]+)(\.[0-9]+)?$') {
+		$local:Major = [int]$Matches[1]
+		$local:Minor = if ($Matches[2]) { [int]$Matches[2].Substring(1) }
+	}
 	$Latest = $null
 	foreach ($V in $Pkgs) {
 		$Ver = [SemanticVersion]::new($V, '([0-9]+)\.([0-9]+)\.([0-9]+)')
-		if (($null -eq $Latest) -or ($Ver.LaterThan($Latest))) {
-			if ($Matcher -and ($V -notmatch $Matcher)) {
-				continue
-			}
+		if (((-not $Latest) -or $Ver.LaterThan($Latest)) -and ((-not $local:Major) -or ($Ver.Major -eq $local:Major)) -and ((-not $local:Minor) -or ($Ver.Minor -eq $local:Minor))) {
 			$Latest = $Ver
 		}
 	}
 	if (-not $Latest) {
-		Write-PwrFatal "no package named $Name$(if ($Matcher) { " matching $Matcher" })"
+		Write-PwrFatal "no package for $Name$(if ($Version) { ":$Version" })"
 	}
 	return $Latest.ToString()
 }
@@ -868,7 +869,7 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.27'
+$env:PwrVersion = '0.4.28'
 
 if (-not $Run) {
 	switch ($Command) {
@@ -897,10 +898,11 @@ if (-not $Run) {
 				Write-PwrFatal 'cannot update while running offline'
 			} else {
 				$PwrCmd = "$PwrPath\cmd"
+				$PwrScriptPath = "$PwrCmd\pwr.ps1"
 				mkdir $PwrCmd -Force | Out-Null
 				Invoke-PwrWebRequest -UseBasicParsing 'https://api.github.com/repos/airpwr/airpwr/contents/src/pwr.ps1' | ConvertFrom-Json | ForEach-Object {
 					$Content = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_.Content))
-					[IO.File]::WriteAllText("$PwrCmd\pwr.ps1", $Content)
+					[IO.File]::WriteAllText($PwrScriptPath, $Content)
 				}
 				$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 				if (-not $UserPath.Contains($PwrCmd)) {
@@ -909,7 +911,9 @@ if (-not $Run) {
 				if (-not "$env:Path".Contains($PwrCmd)) {
 					$env:Path = "$env:Path;$PwrCmd"
 				}
-				& "$PwrCmd\pwr.ps1" version
+				$env:PwrVersion = $null
+				& $PwrScriptPath | Out-Null
+				Write-PwrOutput "version $env:PwrVersion sha256:$((Get-FileHash -Path $PwrScriptPath -Algorithm SHA256).Hash.ToLower())"
 			}
 			exit
 		}
