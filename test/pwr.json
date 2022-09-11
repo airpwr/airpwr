@@ -13,5 +13,6 @@
 			"packages": ["pwr"],
 			"command": "pwr version | Out-Null"
 		}
-	}
+	},
+	"version": "0.3.+"
 }

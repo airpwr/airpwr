@@ -12,6 +12,7 @@
 	shell, sh		Configures the terminal with the listed packages and starts a session
 	exit			Ends the session and restores the previous terminal state
 	load			Loads packages into the terminal transparently to shell sessions
+	config			Displays the pwr config path
 	home			Displays the pwr home path
 	help, h			Displays syntax and descriptive information for calling pwr
 	version, v		Displays this verion of pwr
@@ -78,7 +79,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param (
 	[Parameter(Position = 0)]
-	[ValidateSet('v', 'version', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'rm', 'remove', 'prune', 'which', 'where')]
+	[ValidateSet('v', 'version', 'config', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'rm', 'remove', 'prune', 'which', 'where')]
 	[string]$Command,
 	[Parameter(Position = 1)]
 	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]+)|latest|(?=:))(:([a-zA-Z0-9_-]+))?)?))$')]
@@ -178,10 +179,6 @@ Class SemanticVersion : System.IComparable {
 
 	[bool]LaterThan([object]$Obj) {
 		return $this.CompareTo($Obj) -gt 0
-	}
-
-	[bool]Equals([object]$Obj) {
-		return $This.CompareTo($Obj) -eq 0
 	}
 
 	[int]CompareTo([object]$Obj) {
@@ -635,18 +632,18 @@ function Invoke-PwrPackageShell($Pkg) {
 function Assert-NonEmptyPwrPackages {
 	if ($Packages.Count -gt 0) {
 		return
-	} elseif ($PwrConfig.Packages.Count -gt 0) {
-		Write-PwrInfo "using config at $PwrConfigPath"
-		$script:Packages = $PwrConfig.Packages
-	} elseif ($PwrConfig) {
-		Write-PwrFatal "no packages declared in $PwrConfigPath"
+	} elseif (($local:Pkgs = Get-PwrConfigProperty 'packages').Count -gt 0) {
+		Write-PwrInfo "using config at $(if ($PwrConfig.Local) { $PwrConfig.Local.Path } else { $PwrConfigPath })"
+		$script:Packages = $local:Pkgs
+	} elseif ($PwrConfig.Local) {
+		Write-PwrFatal "no packages declared in $($PwrConfig.Local.Path)"
 	} else {
 		Write-PwrFatal 'no packages provided'
 	}
 }
 
 function Get-PwrRepositories {
-	$Rs = if ($Repositories) { $Repositories } elseif ($PwrConfig.Repositories) { $PwrConfig.Repositories } else { , 'airpower/shipyard' }
+	$Rs = if ($Repositories) { $Repositories } elseif ($R = Get-PwrConfigProperty 'repositories') { $R } else { , 'airpower/shipyard' }
 	$Repos = @()
 	foreach ($Repo in $Rs) {
 		$Uri = $Repo
@@ -657,11 +654,12 @@ function Get-PwrRepositories {
 		if (-not $Uri.StartsWith('http')) {
 			$Uri = "https://$Uri"
 		}
-		foreach ($Auth in $PwrAuths.Keys) {
+		$Auths = Get-PwrConfigProperty 'auths'
+		foreach ($Auth in $Auths.Keys) {
 			$AuthUri = if (-not $Auth.StartsWith('http')) { "https://$Auth" } else { $Auth }
 			if ($Uri.StartsWith($AuthUri)) {
-				if ($PwrAuths.$Auth.Basic) {
-					$Headers.Authorization = "Basic $($PwrAuths.$Auth.Basic)"
+				if ($Auths.$Auth.Basic) {
+					$Headers.Authorization = "Basic $($Auths.$Auth.Basic)"
 					break
 				}
 			}
@@ -783,7 +781,7 @@ function Resolve-PwrPackageOverrides {
 		$PkgOverride.$($Pkg.Name) = $Pkg
 	}
 	$Pkgs = @()
-	foreach ($P in $PwrConfig.Packages) {
+	foreach ($P in Get-PwrConfigProperty 'packages') {
 		$Split = Split-PwrPackage $P
 		$Pkg = $PkgOverride.$($Split.Name)
 		if ($Pkg) {
@@ -859,7 +857,7 @@ function Exit-Shell {
 }
 
 function Invoke-PwrScriptCommand($Script) {
-	if ($Script -is [PSCustomObject]) {
+	if ($Script -is [Hashtable]) {
 		$Format = $Script.Format
 		if ($null -eq $Format) {
 			$RunCmd = $Script.Command
@@ -874,7 +872,7 @@ function Invoke-PwrScriptCommand($Script) {
 			Write-PwrFatal "cannot specify 'command' when 'format' is provided in script '$Name'"
 		} else {
 			$FormatArgs = @($Name)
-			if ($Script.Args -is [Array]) {
+			if ($Script.Args -is [System.Collections.ArrayList]) {
 				foreach ($A in $Script.Args) {
 					if ($A -isnot [string]) {
 						Write-PwrFatal "wrong JSON type for item of array 'args', expected string"
@@ -949,29 +947,157 @@ function Invoke-PwrScripts {
 			Write-PwrFatal "expected exactly one run argument: $Run"
 		}
 		Invoke-PwrScriptCommand @{Command = $Run[0]}
-	} elseif ($PwrConfig) {
+	} elseif ($Scripts = Get-PwrConfigProperty 'scripts') {
 		$Name = $Run[0]
-		$Script = $PwrConfig.Scripts.$Name
-		if (($null -ne $Script) -or ($Run.Count -ge 1)) {
+		$Script = $Scripts.$Name
+		if ($null -eq $Script) {
+			Write-PwrFatal "no declared script '$Name'"
+		} else {
 			$Location = Get-Location
-			Set-Location (Split-Path $PwrConfigPath -Parent)
+			Set-Location (Split-Path $Script.Cfg.Path -Parent)
 			try {
-				Invoke-PwrScriptCommand $Script
+				Invoke-PwrScriptCommand $Script.Value
 			} finally {
 				Set-Location $Location
 			}
-		} else {
-			Write-PwrFatal "no declared script '$Name'"
 		}
+	} elseif ($PwrConfig.Local) {
+		Write-PwrFatal "no scripts declared in $($PwrConfig.Local.Path)"
 	} else {
 		Write-PwrFatal 'no packages provided'
 	}
 }
 
+function Get-PwrConfig {
+	$PwrCfgGlobal = try { $Cfg = Get-Content $PwrConfigPath | ConvertFrom-Json | ConvertTo-Hashtable; $Cfg.Path = $PwrConfigPath; $Cfg } catch { $null }
+	$PwrCfgDir = $ExecutionContext.SessionState.Path.CurrentLocation
+	do {
+		$PwrCfgPath = "$PwrCfgDir\pwr.json"
+		if (Test-Path -Path $PwrCfgPath -PathType Leaf) {
+			try {
+				$PwrCfgLocal = Get-Content $PwrCfgPath | ConvertFrom-Json | ConvertTo-Hashtable
+				$PwrCfgLocal.Path = $PwrCfgPath
+				return @{
+					Global = $PwrCfgGlobal
+					Local = $PwrCfgLocal
+				}
+			} catch {
+				Write-PwrFatal "bad JSON parse of file $PwrCfgPath`n     $_"
+			}
+		}
+		$PwrCfgDir = Split-Path $PwrCfgDir -Parent
+	} while ($PwrCfgDir.Length -gt 0)
+	if ($PwrCfgGlobal) {
+		return @{Global = $PwrCfgGlobal}
+	}
+}
+
+function Get-PwrConfigProperty($Name) {
+	$Prop = $null
+	switch ($Name) {
+		'auths' {
+			if ($PwrConfig.Global -and $PwrConfig.Global.Auths) {
+				foreach ($K in $PwrConfig.Global.Auths.Keys) {
+					if (-not $Prop) {
+						$Prop = @{}
+					}
+					$Prop.$K = $PwrConfig.Global.Auths.$K
+				}
+			}
+		}
+		'packages' {
+			$Prop = @()
+			foreach ($Cfg in $PwrConfig.Global, $PwrConfig.Local) {
+				if ($Cfg -and $Cfg.Packages) {
+					$Prop += $Cfg.Packages
+				}
+			}
+		}
+		'prune' {
+			if ($PwrConfig.Global -and $PwrConfig.Global.Prune) {
+				foreach ($K in $PwrConfig.Global.Prune.Keys) {
+					if (-not $Prop) {
+						$Prop = @{}
+					}
+					$Prop.$K = $PwrConfig.Global.Prune.$K
+				}
+			}
+		}
+		'repositories' {
+			$Prop = @()
+			foreach ($Cfg in $PwrConfig.Global, $PwrConfig.Local) {
+				if ($Cfg -and $Cfg.Repositories) {
+					$Prop += $Cfg.Repositories
+				}
+			}
+		}
+		'scripts' {
+			foreach ($Cfg in $PwrConfig.Global, $PwrConfig.Local) {
+				if ($Cfg) {
+					foreach ($K in $Cfg.Scripts.Keys) {
+						if (-not $Prop) {
+							$Prop = @{}
+						}
+						$Prop.$K = @{
+							Cfg = $Cfg
+							Value = $Cfg.Scripts.$K
+						}
+					}
+				}
+			}
+		}
+		'version' {
+			foreach ($Cfg in $PwrConfig.Global, $PwrConfig.Local) {
+				if ($Cfg -and $Cfg.Version) {
+					$Prop = $Cfg.Version
+				}
+			}
+		}
+		default {
+			throw $_
+		}
+	}
+	return $Prop
+}
+
+function Compare-Version($PwrVersion, $PwrCfgVersion) {
+	if (($PwrCfgVersion -match '^(?:([0-9]+)(?:\.(?:(?:([0-9]+)(?:\.(?:([0-9]+)|([*+])))?)|([*+])))?)|(\*)$') -and ($Matches[0] -eq $PwrCfgVersion)) {
+		if ($Matches[6]) {
+			return $true
+		}
+		$V = [SemanticVersion]::new("$PwrVersion")
+		$Major = [int]$Matches[1]
+		$Minor = [int]$Matches[2]
+		if (-not $Matches[2]) {
+			if ($Matches[5] -eq '+') {
+				return $V.Major -ge $Major
+			} else {
+				return $V.Major -eq $Major
+			}
+		} elseif (-not $Matches[3]) {
+			if ($Matches[4] -eq '+') {
+				return ($V.Major -eq $Major) -and ($V.Minor -ge $Minor)
+			} else {
+				return ($V.Major -eq $Major) -and ($V.Minor -eq $Minor)
+			}
+		} else {
+			$Patch = [int]$Matches[3]
+			return ($V.Major -eq $Major) -and ($V.Minor -eq $Minor) -and ($V.Patch -eq $Patch)
+		}
+	} else {
+		Write-PwrFatal "invalid value for 'version': $PwrCfgVersion"
+	}
+}
+
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
+$PwrConfigPath = "$PwrPath\pwrconfig.json"
+$PwrConfig = Get-PwrConfig
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.31'
+$env:PwrVersion = '0.5.0'
+if (($PwrConfigVersion = Get-PwrConfigProperty 'version') -and (-not (Compare-Version $env:PwrVersion $PwrConfigVersion))) {
+	Write-PwrFatal "version $env:PwrVersion does not match $PwrConfigVersion in configuration"
+}
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
@@ -985,6 +1111,14 @@ if ($null -eq $Run) {
 				}
 			} else {
 				Write-PwrOutput "version $env:PwrVersion"
+			}
+			exit
+		}
+		'config' {
+			if (($local:PwrCfg = Get-PwrConfig) -and $local:PwrCfg.Local) {
+				Write-PwrHost $local:PwrCfg.Local.Path
+			} else {
+				Write-PwrFatal "no pwr configuration found in $($ExecutionContext.SessionState.Path.CurrentLocation) or any of its parent directories"
 			}
 			exit
 		}
@@ -1042,21 +1176,6 @@ if ($null -eq $Run) {
 	}
 }
 
-function Get-PwrConfig {
-	$PwrCfgDir = $ExecutionContext.SessionState.Path.CurrentLocation
-	do {
-		$PwrCfg = "$PwrCfgDir\pwr.json"
-		if (Test-Path -Path $PwrCfg -PathType Leaf) {
-			try {
-				return $PwrCfg, (Get-Content $PwrCfg | ConvertFrom-Json)
-			} catch {
-				Write-PwrFatal "bad JSON parse of file $PwrCfg - $_"
-			}
-		}
-		$PwrCfgDir = Split-Path $PwrCfgDir -Parent
-	} while ($PwrCfgDir.Length -gt 0)
-}
-
 function Lock-PwrLock {
 	try {
 		New-Item $PwrLock -ItemType File -WhatIf:$false | Out-Null
@@ -1074,9 +1193,7 @@ function Unlock-PwrLock {
 }
 
 Compare-PwrTags
-$PwrConfigPath, $PwrConfig = Get-PwrConfig
 $PwrLock = "$PwrPath\pwr.lock"
-$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction SilentlyContinue | ConvertFrom-Json | ConvertTo-HashTable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
 Resolve-PwrPackageOverrides
@@ -1249,16 +1366,8 @@ switch ($Command) {
 		}
 	}
 	'prune' {
-		$PwrPrunePath = "$PwrPath\prune.json"
-		if (Test-Path $PwrPrunePath -PathType Leaf) {
-			try {
-				$PruneRules = Get-Content $PwrPrunePath | ConvertFrom-Json | ConvertTo-Hashtable
-			} catch {
-				Write-PwrFatal "failed to read prune rules from $PwrPrunePath`n     $_"
-			}
-		} else {
-			Write-PwrFatal "no prune rules at $PwrPrunePath"
-		}
+		$PruneRules = Get-PwrConfigProperty 'prune'
+		$WildcardRule = $null
 		foreach ($R in $PruneRules.Keys) {
 			$Rule = $PruneRules.$R
 			switch ($Rule) {
@@ -1294,7 +1403,6 @@ switch ($Command) {
 				Write-PwrDebug "pruning package $Name by rule $Rule"
 				$Prev = $null
 				foreach ($Ver in $PkgVers.$Name | Sort-Object -Descending) {
-					Write-Host "$Name $Ver"
 					$RemovePkg = switch ($Rule) {
 						'latest' {
 							$true
@@ -1348,7 +1456,7 @@ switch ($Command) {
 			Write-PwrHost (Resolve-PwrPackage $local:Pkg)
 		}
 	}
-	Default {
+	default {
 		Write-PwrFatal "no such command '$Command'"
 	}
 }

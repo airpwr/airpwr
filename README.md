@@ -84,16 +84,18 @@ An `auths.json` might look like:
 
 # Commands
 
-## Prune
+## `prune`
 
 Removes all packages from `<pwr home>\pkg` that are out-of-date. Configure what packages should be considered "out-of-date" through the `<pwr home>\prune.json` file. As an example, the file might look like this:
 
 ```json
 {
-	"*": "latest",
-	"jdk": "major",
-	"jre": "major",
-	"python": "minor"
+	"prune": {
+		"*": "latest",
+		"jdk": "major",
+		"jre": "major",
+		"python": "minor"
+	}
 }
 ```
 
