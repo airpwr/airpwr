@@ -308,22 +308,45 @@ function Write-PwrWarning($Message) {
 	}
 }
 
-function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing) {
+function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$Include) {
 	if ($Offline) {
 		Write-PwrThrow 'cannot web request while running offline'
 	}
-	$Expr = "$env:SYSTEMROOT\System32\curl.exe -s -L --url '$Uri'"
+	$Expr = "$env:SYSTEMROOT\System32\curl.exe$(if ($Include) { ' -i' }) -s -L --url '$Uri'"
 	foreach ($K in $Headers.Keys) {
 		$Expr += " --header '${K}: $($Headers.$K)'"
 	}
 	if ($OutFile) {
 		$Expr += " --output '$OutFile'"
 	}
-	$Content = Invoke-Expression $Expr
+	$Resp = Invoke-Expression $Expr
 	if ($global:LASTEXITCODE) {
 		Write-PwrFatal "command 'curl.exe' finished with non-zero exit value $global:LASTEXITCODE"
+	} elseif ($Include) {
+		$HttpMessage = $Resp -split "`r`n"
+		$StartLine = $null
+		$InBody = $false
+		$Content = [string]::Empty
+		$RespHeaders = @{}
+		foreach ($Line in $HttpMessage) {
+			if (-not $StartLine) {
+				$StartLine = $Line
+			} elseif ($InBody) {
+				$Content += $Line
+			} elseif ([string]::IsNullOrWhiteSpace($Line)) {
+				$InBody = $true
+			} elseif ($Line -match '^([^:]+):[ \t]*?([^ \t].*?)[ \t]*$') {
+				$RespHeaders.($Matches[1]) = $Matches[2]
+			} else {
+				Write-PwrFatal "bad header in HTTP response: $Line"
+			}
+		}
+		return @{
+			Content = $Content
+			Headers = $RespHeaders
+		}
 	}
-	return $Content
+	return $Resp
 }
 
 function Get-StringHash($S) {
@@ -331,7 +354,7 @@ function Get-StringHash($S) {
 	return (Get-FileHash -InputStream $Stream).Hash.Substring(0, 12)
 }
 
-function ConvertTo-HashTable {
+function ConvertTo-Hashtable {
 	param (
 		[Parameter(ValueFromPipeline)][PSCustomObject]$Object
 	)
@@ -341,7 +364,7 @@ function ConvertTo-HashTable {
 		if ($V -is [Array]) {
 			$V = [System.Collections.ArrayList]$V
 		} elseif ($V -is [PSCustomObject]) {
-			$V = ($V | ConvertTo-HashTable)
+			$V = ($V | ConvertTo-Hashtable)
 		}
 		$Table.($_.Name) = $V
 	}
@@ -350,18 +373,17 @@ function ConvertTo-HashTable {
 
 function Get-DockerToken($Repo) {
 	$Resp = Invoke-PwrWebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($Repo.Scope):pull"
-	return ($Resp | ConvertFrom-Json).Token
+	return ([string]$Resp | ConvertFrom-Json).Token
 }
 
 function Get-ImageManifest($Pkg) {
-	$Headers = @{'Accept' = 'application/vnd.docker.distribution.manifest.v2+json'}
+	$Headers = @{Accept = 'application/vnd.docker.distribution.manifest.v2+json'}
 	if ($Pkg.Repo.Headers.Authorization) {
 		$Headers.Authorization = $Pkg.Repo.Headers.Authorization
 	} elseif ($Pkg.Repo.IsDocker) {
 		$Headers.Authorization = "Bearer $(Get-DockerToken $Pkg.Repo)"
 	}
-	$Resp = Invoke-PwrWebRequest "$($Pkg.Repo.Uri)/manifests/$($Pkg.Tag)" -Headers $Headers -UseBasicParsing
-	return [string]$Resp | ConvertFrom-Json
+	return Invoke-PwrWebRequest "$($Pkg.Repo.Uri)/manifests/$($Pkg.Tag)" -Headers $Headers -Include
 }
 
 function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
@@ -379,7 +401,7 @@ function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 	}
 	$Hash = "sha256:$((Get-FileHash -Path $Tmp -Algorithm SHA256).Hash)"
 	if (-not (Test-Path -Path $Tmp -PathType Leaf) -or $Hash -ne $Digest) {
-		Write-PwrFatal "the download of layer$(if ($Hash.Length -gt 7) { " with digest $Hash" }) for package $Ref was corrupted and does not match expected digest $Digest"
+		Write-PwrFatal "download of layer$(if ($Hash.Length -gt 7) { " with digest $Hash" }) for package $Ref was corrupted and does not match expected digest $Digest"
 	}
 	return Start-Job -ScriptBlock {
 		$Tmp, $Out = $Args
@@ -398,7 +420,7 @@ function Get-RepoTags($Repo) {
 	} elseif ($Repo.IsDocker) {
 		$Headers.Authorization = "Bearer $(Get-DockerToken $Repo)"
 	}
-	$Resp = Invoke-PwrWebRequest "$($Repo.Uri)/tags/list" -Headers $Headers -UseBasicParsing
+	$Resp = Invoke-PwrWebRequest "$($Repo.Uri)/tags/list" -Headers $Headers
 	return [string]$Resp | ConvertFrom-Json
 }
 
@@ -414,12 +436,14 @@ function Split-PwrPackage($Pkg) {
 	if ($Pkg.StartsWith('file:///')) {
 		$Split = $Pkg.Split('<')
 		$Uri = $Split[0].Trim()
+		$Path = (Resolve-Path $Uri.Substring(8)).Path
 		return @{
 			Name = $Uri
 			Ref = $Uri
 			Local = $true
-			Path = (Resolve-Path $Uri.Substring(8)).Path
+			Path = $Path
 			Config = if ($Split[1]) { $Split[1].Trim() } else { 'default' }
+			Digest = try { Get-Content "$Path\pwr.sha256" } catch { }
 		}
 	}
 	$Split = $Pkg.Split(':')
@@ -431,6 +455,7 @@ function Split-PwrPackage($Pkg) {
 	if ($Split.Count -ge 2 -and ($Split[1] -ne '')) {
 		$Props.Version = $Split[1]
 	}
+	$Props.Request = $Props.Version
 	if ($Split.Count -ge 3 -and ($Split[2] -ne '')) {
 		$Props.Config = $Split[2]
 	}
@@ -452,7 +477,7 @@ function Get-LatestVersion($Pkgs, $Version) {
 	if (-not $Latest) {
 		Write-PwrFatal "no package for $Name$(if ($Version) { ":$Version" })"
 	}
-	return $Latest.ToString()
+	return [string]$Latest
 }
 
 function Assert-PwrPackage($Pkg) {
@@ -479,6 +504,8 @@ function Assert-PwrPackage($Pkg) {
 		if ($P.Tag) {
 			$P.Repo = $Repo
 			$P.Ref = "$($P.Name):$($P.Version)$(if ($P.Config -ne 'default') { ":$($P.Config)" })"
+			$P.Path = "$PwrPath\pkg\$($P.Tag)"
+			$P.Digest = try { Get-Content "$($P.Path)\pwr.sha256" } catch { }
 			return $P
 		}
 	}
@@ -491,7 +518,7 @@ function Assert-PwrPackage($Pkg) {
 }
 
 function Compare-PwrTags {
-	$Cache = "$PwrPath\cache\tags"
+	$Cache = "$PwrCachePath\tags"
 	$CacheExists = Test-Path $Cache
 	if ($CacheExists) {
 		$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
@@ -499,9 +526,8 @@ function Compare-PwrTags {
 	}
 	if ((-not $Offline) -and (-not $CacheExists -or $OutOfDate -or $Fetch)) {
 		try {
-			$Req = Invoke-PwrWebRequest -Uri 'https://api.github.com/repos/airpwr/airpwr/tags' -UseBasicParsing
-			mkdir (Split-Path $Cache -Parent) -Force | Out-Null
-			[IO.File]::WriteAllText($Cache, $Req)
+			mkdir $PwrCachePath -Force | Out-Null
+			Invoke-PwrWebRequest -OutFile $Cache -Uri 'https://api.github.com/repos/airpwr/airpwr/tags'
 		} catch {
 			Write-PwrWarning $_
 		}
@@ -522,7 +548,7 @@ function Compare-PwrTags {
 
 function Get-PwrPackages {
 	foreach ($Repo in $PwrRepositories) {
-		$Cache = "$PwrPath\cache\$($Repo.Hash)"
+		$Cache = "$PwrCachePath\$($Repo.Hash)"
 		$CacheExists = Test-Path $Cache
 		if ($CacheExists) {
 			$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
@@ -547,7 +573,7 @@ function Get-PwrPackages {
 				foreach ($Name in $Names.Keys) {
 					$Pkgs.$Name = $Pkgs.$Name | ForEach-Object { $_.ToString() }
 				}
-				mkdir (Split-Path $Cache -Parent) -Force | Out-Null
+				mkdir $PwrCachePath -Force | Out-Null
 				[IO.File]::WriteAllText($Cache, (ConvertTo-Json $Pkgs -Depth 50 -Compress))
 			} catch {
 				Write-PwrOutput "failed to fetch tags from $($Repo.Uri)" -ForegroundColor Red
@@ -556,7 +582,6 @@ function Get-PwrPackages {
 		}
 		$Repo.Packages = Get-Content $Cache -ErrorAction SilentlyContinue | ConvertFrom-Json
 	}
-
 }
 
 function Test-PwrPackage($Pkg) {
@@ -564,7 +589,7 @@ function Test-PwrPackage($Pkg) {
 	return Test-Path "$PkgPath\.pwr"
 }
 
-function Invoke-PwrPackagePull($Pkg, [ref]$Job) {
+function Invoke-PwrPackagePull($Pkg, [ref]$Pull) {
 	if (Test-PwrPackage $Pkg) {
 		Write-PwrFatal "cannot fetch $($Pkg.Ref) when already exists"
 	} elseif ($Offline) {
@@ -574,11 +599,12 @@ function Invoke-PwrPackagePull($Pkg, [ref]$Job) {
 		$Manifest = Get-ImageManifest $Pkg
 		$PkgPath = Resolve-PwrPackage $Pkg
 		mkdir $PkgPath -Force | Out-Null
-		foreach ($Layer in $Manifest.Layers) {
+		foreach ($Layer in ([string]$Manifest.Content | ConvertFrom-Json).Layers) {
 			if ($Layer.MediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
-				$Job.Value += Invoke-PullImageLayer $PkgPath $Pkg.Ref $Pkg.Repo $Layer.Digest
+				$Pull.Value.Job += Invoke-PullImageLayer $PkgPath $Pkg.Ref $Pkg.Repo $Layer.Digest
 			}
 		}
+		$Pull.Value.Digest = $Manifest.Headers.'Docker-Content-Digest'
 	}
 }
 
@@ -592,7 +618,19 @@ function Receive-PwrJob($Job, $Pkgs) {
 			}
 		}
 		Remove-Job $Job
-		Write-PwrOutput "fetched $($Pkgs.Count) package$(if ($Pkgs.Count -ne 1) { 's' }) ($($Refs = foreach ($P in $Pkgs) { $P.Ref }; $Refs -join ', '))"
+		foreach ($P in $Pkgs) {
+			try {
+				if ($P.Digest) {
+					New-Item "$($P.Path)\pwr.sha256" -Value $P.Digest | Out-Null
+				} else {
+					Write-PwrWarning "no digest received for $($P.Ref)"
+				}
+			} catch {
+				Write-PwrFatal "failed to write digest to $($P.Path)\pwr.sha256"
+			}
+			Write-PwrOutput "fetched $($P.Ref) $($P.Digest)"
+		}
+		Write-PwrOutput "fetched $($Pkgs.Count) package$(if ($Pkgs.Count -ne 1) { 's' })"
 	}
 }
 
@@ -601,7 +639,7 @@ function Invoke-PwrPackageShell($Pkg) {
 	if ($Offline -and -not (Test-PwrPackage $Pkg)) {
 		Write-PwrThrow "cannot resolve package $($Pkg.Ref) while running offline"
 	}
-	$Vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-HashTable
+	$Vars = (Get-Content -Path "$PkgPath\.pwr").Replace('${.}', (Resolve-Path $PkgPath).Path.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-Hashtable
 	if ($Pkg.Config -eq 'default') {
 		$PkgVar = $Vars
 	} else {
@@ -611,20 +649,18 @@ function Invoke-PwrPackageShell($Pkg) {
 		$PkgVar = $Vars."$($Pkg.Config)"
 	}
 	Format-Table $PkgEnv
-	# Vars
 	foreach ($K in $PkgVar.Var.Keys) {
 		Set-Variable -Name $K -Value $PkgVar.Var.$K -Scope Global
 	}
-	# Env
 	foreach ($K in $PkgVar.Env.Keys) {
-		$Prefix = ''
+		$Prefix = [string]::Empty
 		if ($K -eq 'path') {
 			$Prefix += "${env:Path};"
 		}
 		Set-Item "env:$K" "$Prefix$($PkgVar.Env.$K)"
 	}
 	$Item = Get-ChildItem -Path "$PkgPath\.pwr"
-	$Item.LastAccessTime = (Get-Date)
+	$Item.LastAccessTime = Get-Date
 }
 
 function Assert-NonEmptyPwrPackages {
@@ -768,8 +804,7 @@ function Format-PwrPackages([parameter(ValueFromPipeline=$True)]$Packages) {
 function Resolve-PwrPackageOverrides {
 	if (-not $Override) {
 		return
-	}
-	if (-not $PwrConfig) {
+	} elseif (-not $PwrConfig) {
 		Write-PwrFatal 'no configuration found to override'
 	}
 	$PkgOverride = @{}
@@ -803,6 +838,57 @@ function Resolve-PwrPackageOverrides {
 	[string[]]$script:Packages = $Pkgs
 }
 
+function Update-PwrSum($Pkgs) {
+	if ($PwrConfigPath -and (-not $Override)) {
+		$PwrSumPath = "$(Split-Path $PwrConfigPath -Parent)\pwr.sum"
+		$Expected = @{}
+		if (Test-Path -Path $PwrSumPath) {
+			try {
+				$PwrSum = Get-Content $PwrSumPath | ConvertFrom-Json | ConvertTo-Hashtable
+			} catch {
+				Write-PwrFatal "could not resolve $PwrSumPath as a regular file"
+			}
+			foreach ($K in $PwrSum.Keys) {
+				if ($K -match '([^:]+):(.+)') {
+					$Expected.($Matches[1]) = @{
+						Version = [SemanticVersion]::new($Matches[2])
+						Sha256 = $PwrSum.$K.Sha256
+					}
+				} else {
+					Write-PwrFatal "bad key '$K' in $PwrSumPath"
+				}
+			}
+		}
+		$PwrSum = @{}
+		foreach ($P in $Pkgs) {
+			if ($P.Digest) {
+				$E = $Expected.($P.Name)
+				$V = $E.Version
+				$PkgVer = [SemanticVersion]::new($P.Version)
+				if ($V) {
+					$A = $P.Request.Split(".+")
+					$MajorEq = ($A.Count -eq 0) -or ($A[0] -eq $V.Major)
+					$MinorEq = ($A.Count -lt 2) -or ($A[1] -eq $V.Minor)
+					$PatchEq = ($A.Count -lt 3) -or ($A[2] -eq $V.Patch)
+					$BuildEq = ($A.Count -lt 4) -or (-not $V.Build) -or ($A[3] -eq $V.Build)
+					if ((($P.Request -eq 'latest') -or ($MajorEq -and $MinorEq -and $PatchEq -and $BuildEq)) -and $V.LaterThan($PkgVer)) {
+						Write-PwrFatal "package $($P.Ref) is older than version $V in $PwrSumPath`n     rerun with '-fetch' to pull latest repository tags"
+					}
+				}
+				$Hash = $E.Sha256
+				$Digest = $P.Digest.Replace('sha256:', '')
+				if ($Hash -and ($PkgVer -eq $V) -and ($Hash -ne $Digest)) {
+					Write-PwrFatal "sums for package $($P.Ref) do not match`n     $Hash in $PwrSumPath`n     $Digest from $($P.Repo.Uri)"
+				}
+				$PwrSum.($P.Ref) = @{'sha256' = $Digest}
+			}
+		}
+		if ((Test-Path -Path $PwrSumPath) -or ($PwrSum.Count -gt 0)) {
+			[IO.File]::WriteAllText($PwrSumPath, (ConvertTo-Json $PwrSum -Compress))
+		}
+	}
+}
+
 function Enter-Shell {
 	if ($env:PwrShellPackages) {
 		Write-PwrFatal "cannot start a new shell session while one is in progress; use command 'exit' to end the current session"
@@ -814,12 +900,16 @@ function Enter-Shell {
 		foreach ($P in $Packages) {
 			$Pkg = Assert-PwrPackage $P
 			if (-not (Test-PwrPackage $Pkg)) {
-				Invoke-PwrPackagePull $Pkg ([ref]$Job)
+				$Pull = @{}
+				Invoke-PwrPackagePull $Pkg ([ref]$Pull)
+				$Job += $Pull.Job
+				$Pkg.Digest = $Pull.Digest
 				$Pkgs += , $Pkg
 			}
 			$PwrPkgs += , $Pkg
 		}
 		Receive-PwrJob $Job $Pkgs
+		Update-PwrSum $PwrPkgs
 		Save-PSSessionState
 		$env:PwrShellPackages = "$($Refs = foreach ($P in $PwrPkgs) { $P.Ref }; $Refs -join ' ')"
 		Clear-PSSessionState
@@ -831,7 +921,7 @@ function Enter-Shell {
 				$env:PwrShellPackages = $null
 				throw $_
 			}
-			Write-PwrOutput "using $($P.Ref)"
+			Write-PwrOutput "using $($P.Ref) $($P.Digest)"
 		}
 	} finally {
 		Unlock-PwrLock
@@ -965,8 +1055,12 @@ function Invoke-PwrScripts {
 
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
+if (-not (Test-Path $PwrPath -PathType Container)) {
+	Write-PwrFatal "pwr home '$PwrPath' does not exist or is not a directory"
+}
+$PwrCachePath = "$PwrPath\cache"
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.31'
+$env:PwrVersion = '0.5.0'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
@@ -1016,11 +1110,9 @@ if ($null -eq $Run) {
 					if (-not "$env:Path".Contains($PwrCmd)) {
 						$env:Path = "$env:Path;$PwrCmd"
 					}
-					$CacheDir = "$PwrPath\cache"
-					Remove-Item $CacheDir -Recurse -Force | Out-Null
-					$TagsCache = "$CacheDir\tags"
-					mkdir (Split-Path $TagsCache -Parent) -Force | Out-Null
-					[IO.File]::WriteAllText($TagsCache, ($local:Tags | ConvertTo-Json -Compress))
+					Remove-Item $PwrCachePath -Recurse -Force | Out-Null
+					mkdir $PwrCachePath -Force | Out-Null
+					[IO.File]::WriteAllText("$PwrCachePath\tags", ($local:Tags | ConvertTo-Json -Compress))
 					$env:PwrVersion = $null
 					& $PwrScriptPath | Out-Null
 					Write-PwrOutput "version $env:PwrVersion sha256:$((Get-FileHash -Path $PwrScriptPath -Algorithm SHA256).Hash.ToLower())"
@@ -1038,18 +1130,20 @@ if ($null -eq $Run) {
 }
 
 function Get-PwrConfig {
-	$PwrCfgDir = $ExecutionContext.SessionState.Path.CurrentLocation
-	do {
-		$PwrCfg = "$PwrCfgDir\pwr.json"
-		if (Test-Path -Path $PwrCfg -PathType Leaf) {
-			try {
-				return $PwrCfg, (Get-Content $PwrCfg | ConvertFrom-Json)
-			} catch {
-				Write-PwrFatal "bad JSON parse of file $PwrCfg - $_"
+	if ($Override -or (-not $Packages)) {
+		$PwrCfgDir = $ExecutionContext.SessionState.Path.CurrentLocation
+		do {
+			$PwrCfg = "$PwrCfgDir\pwr.json"
+			if (Test-Path -Path $PwrCfg -PathType Leaf) {
+				try {
+					return $PwrCfg, (Get-Content $PwrCfg | ConvertFrom-Json)
+				} catch {
+					Write-PwrFatal "bad JSON parse of file $PwrCfg - $_"
+				}
 			}
-		}
-		$PwrCfgDir = Split-Path $PwrCfgDir -Parent
-	} while ($PwrCfgDir.Length -gt 0)
+			$PwrCfgDir = Split-Path $PwrCfgDir -Parent
+		} while ($PwrCfgDir.Length -gt 0)
+	}
 }
 
 function Lock-PwrLock {
@@ -1071,7 +1165,7 @@ function Unlock-PwrLock {
 Compare-PwrTags
 $PwrConfigPath, $PwrConfig = Get-PwrConfig
 $PwrLock = "$PwrPath\pwr.lock"
-$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction SilentlyContinue | ConvertFrom-Json | ConvertTo-HashTable
+$PwrAuths = Get-Content "$PwrPath\auths.json" -ErrorAction SilentlyContinue | ConvertFrom-Json | ConvertTo-Hashtable
 $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
 Resolve-PwrPackageOverrides
@@ -1094,7 +1188,10 @@ switch ($Command) {
 				} elseif (Test-PwrPackage $Pkg) {
 					Write-PwrOutput "$($Pkg.Ref) already exists"
 				} else {
-					Invoke-PwrPackagePull $Pkg ([ref]$Job)
+					$Pull = @{}
+					Invoke-PwrPackagePull $Pkg ([ref]$Pull)
+					$Job += $Pull.Job
+					$Pkg.Digest = $Pull.Digest
 					$Pkgs += , $Pkg
 				}
 			}
@@ -1113,7 +1210,10 @@ switch ($Command) {
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
 				if (-not (Test-PwrPackage $Pkg)) {
-					Invoke-PwrPackagePull $Pkg ([ref]$Job)
+					$Pull = @{}
+					Invoke-PwrPackagePull $Pkg ([ref]$Pull)
+					$Job += $Pull.Job
+					$Pkg.Digest = $Pull.Digest
 					$Pkgs += , $Pkg
 				}
 				$PwrPkgs += , $Pkg
@@ -1123,7 +1223,7 @@ switch ($Command) {
 				if (-not "$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
 					Invoke-PwrPackageShell $Pkg
 					$env:PwrLoadedPackages = "$($Pkg.Ref) $env:PwrLoadedPackages"
-					Write-PwrOutput "loaded $($Pkg.Ref)"
+					Write-PwrOutput "loaded $($Pkg.Ref) $($Pkg.Digest)"
 				} elseif (Test-PwrPackage $Pkg) {
 					Write-PwrOutput "$($Pkg.Ref) already loaded"
 				}
@@ -1153,8 +1253,8 @@ switch ($Command) {
 				Write-PwrFatal "package $($Pkg.Ref) is not installed"
 			}
 			$local:PkgPath = Resolve-PwrPackage $Pkg
-			$local:PwrCfg = Get-Content -Raw "$local:PkgPath\.pwr" | ConvertFrom-Json | ConvertTo-HashTable
-			Write-PwrHost "$($Pkg.Ref)"
+			$local:PwrCfg = Get-Content -Raw "$local:PkgPath\.pwr" | ConvertFrom-Json | ConvertTo-Hashtable
+			Write-PwrHost "$($Pkg.Ref) $($Pkg.Digest)"
 			$local:Configs = @('default')
 			foreach ($local:Key in $local:PwrCfg.Keys) {
 				if (($local:Key -eq 'env') -or ($local:Key -eq 'var')) {

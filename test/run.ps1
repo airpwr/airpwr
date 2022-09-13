@@ -2,6 +2,10 @@ param (
 	[string]$TestName
 )
 
+$env:PwrHome = $null
+if (-not (Test-Path "$env:AppData\pwr" -PathType Container)) {
+	mkdir "$env:AppData\pwr" -Force | Out-Null
+}
 $env:Path = "$PSScriptRoot\..\src;$env:Path"
 
 ###### Assertions ######
