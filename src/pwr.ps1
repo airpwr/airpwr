@@ -176,7 +176,7 @@ function Write-Pwr($Message, $ForegroundColor, [switch]$NoNewline, [switch]$Over
 			Write-Host $Message -NoNewline:$NoNewline
 		}
 	} else {
-		Write-Output "pwr: $Message"
+		Write-Output "pwr: $Message" | Out-Default
 	}
 }
 
@@ -188,7 +188,7 @@ function Write-PwrOutput($Message, $ForegroundColor, [switch]$NoNewline) {
 
 function Write-PwrHost($Message) {
 	if (-not $Quiet -and -not $Silent) {
-		Write-Output $Message
+		Write-Output $Message | Out-Default
 	}
 }
 
