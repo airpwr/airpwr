@@ -199,6 +199,13 @@ function Test-Pwr-ShellEnvOther {
 	}
 }
 
+function Test-Pwr-ShellGetPkg {
+	pwr sh pwr; pwr exit
+	Invoke-PwrAssertTrue {
+		$LastExitCode -eq 0
+	}
+}
+
 function Test-Pwr-AltConfig {
 	pwr sh "file:///$PSScriptRoot\pkg3 < alt"
 	Invoke-PwrAssertTrue {
