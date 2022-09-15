@@ -241,6 +241,13 @@ function Test-Pwr-RunWithDefaultArgs {
 	}
 }
 
+function Test-Pwr-RunPwr {
+	pwr -run testPwr
+	Invoke-PwrAssertTrue {
+		$LastExitCode -eq 0
+	}
+}
+
 ###### Test Runner ######
 
 function Invoke-PwrTest($fn) {

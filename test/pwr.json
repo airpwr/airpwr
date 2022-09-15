@@ -7,6 +7,10 @@
 		"setA": {
 			"format": "if ('{1}' -ne 'A') {{ exit 1 }} exit 2",
 			"args": ["A"]
+		},
+		"testPwr": {
+			"packages": ["pwr"],
+			"command": "pwr version | Out-Null"
 		}
 	}
 }
