@@ -176,7 +176,7 @@ function Write-Pwr($Message, $ForegroundColor, [switch]$NoNewline, [switch]$Over
 			Write-Host $Message -NoNewline:$NoNewline
 		}
 	} else {
-		Write-Output "pwr: $Message" | Out-Default
+		Write-Output "pwr: $Message"
 	}
 }
 
@@ -188,7 +188,7 @@ function Write-PwrOutput($Message, $ForegroundColor, [switch]$NoNewline) {
 
 function Write-PwrHost($Message) {
 	if (-not $Quiet -and -not $Silent) {
-		Write-Output $Message | Out-Default
+		Write-Output $Message
 	}
 }
 
@@ -512,7 +512,7 @@ function Test-PwrPackage($Pkg) {
 	return Test-Path "$PkgPath\.pwr"
 }
 
-function Invoke-PwrPackagePull($Pkg) {
+function Invoke-PwrPackagePull($Pkg, [ref]$Job) {
 	if (Test-PwrPackage $Pkg) {
 		Write-PwrFatal "cannot fetch $($Pkg.Ref) when already exists"
 	} elseif ($Offline) {
@@ -522,13 +522,11 @@ function Invoke-PwrPackagePull($Pkg) {
 		$Manifest = Get-ImageManifest $Pkg
 		$PkgPath = Resolve-PwrPackage $Pkg
 		mkdir $PkgPath -Force | Out-Null
-		$Job = @()
 		foreach ($Layer in $Manifest.Layers) {
 			if ($Layer.MediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
-				$Job += Invoke-PullImageLayer $PkgPath $Pkg.Ref $Pkg.Repo $Layer.Digest
+				$Job.Value += Invoke-PullImageLayer $PkgPath $Pkg.Ref $Pkg.Repo $Layer.Digest
 			}
 		}
-		return $Job
 	}
 }
 
@@ -757,7 +755,7 @@ function Enter-Shell {
 		foreach ($P in $Packages) {
 			$Pkg = Assert-PwrPackage $P
 			if (-not (Test-PwrPackage $Pkg)) {
-				$Job += Invoke-PwrPackagePull $Pkg
+				Invoke-PwrPackagePull $Pkg ([ref]$Job)
 				$Pkgs += , $Pkg
 			}
 			$PwrPkgs += , $Pkg
@@ -799,39 +797,52 @@ function Exit-Shell {
 function Invoke-PwrScripts {
 	if ($PwrConfig.Scripts) {
 		$Name = $Run[0]
-		$RunCmd = $PwrConfig.Scripts.$Name
-		if ($RunCmd) {
-			if ($RunCmd -is [PSCustomObject]) {
-				$FormatArgs = @($Name)
-				if ($RunCmd.Args -is [Array]) {
-					foreach ($A in $RunCmd.Args) {
-						if ($A -isnot [string]) {
-							Write-PwrFatal "wrong JSON type for item of array 'args', expected string"
-						}
-						$FormatArgs += $A
+		$Script = $PwrConfig.Scripts.$Name
+		if ($null -ne $Script) {
+			if ($Script -is [PSCustomObject]) {
+				$Format = $Script.Format
+				if ($null -eq $Format) {
+					$RunCmd = $Script.Command
+					if ($null -eq $RunCmd) {
+						Write-PwrFatal "missing JSON key, expected one of 'format' or 'command' in script '$Name'"
+					} elseif ($RunCmd -isnot [string]) {
+						Write-PwrFatal "wrong JSON type for value of 'command', expected string in script '$Name'"
 					}
-				} elseif ($RunCmd.Args) {
-					Write-PwrFatal "wrong JSON type for value of 'args', expected array"
-				}
-				for ($I = 1; $I -lt $Run.Count; ++$I) {
-					if ($I -lt $FormatArgs.Count) {
-						$FormatArgs[$I] = $Run[$I]
-					} else {
-						$FormatArgs += $Run[$I]
-					}
-				}
-				$Format = $RunCmd.Format
-				if (-not $Format) {
-					Write-PwrFatal "missing JSON key 'format' in script '$Name', expected string"
 				} elseif ($Format -isnot [string]) {
-					Write-PwrFatal "wrong JSON type for value of 'format', expected string"
+					Write-PwrFatal "wrong JSON type for value of 'format', expected string in script '$Name'"
+				} elseif ($null -ne $Script.Command) {
+					Write-PwrFatal "cannot specify 'command' when 'format' is provided in script '$Name'"
+				} else {
+					$FormatArgs = @($Name)
+					if ($Script.Args -is [Array]) {
+						foreach ($A in $Script.Args) {
+							if ($A -isnot [string]) {
+								Write-PwrFatal "wrong JSON type for item of array 'args', expected string"
+							}
+							$FormatArgs += $A
+						}
+					} elseif ($null -ne $Script.Args) {
+						Write-PwrFatal "wrong JSON type for value of 'args', expected array"
+					}
+					for ($I = 1; $I -lt $Run.Count; ++$I) {
+						if ($I -lt $FormatArgs.Count) {
+							$FormatArgs[$I] = $Run[$I]
+						} else {
+							$FormatArgs += $Run[$I]
+						}
+					}
+					try {
+						$RunCmd = [string]::Format($Format, [object[]]$FormatArgs)
+					} catch {
+						Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$Format', see below`n     $_"
+					}
 				}
-				try {
-					$RunCmd = [string]::Format($Format, [object[]]$FormatArgs)
-				} catch {
-					Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$Format', see below`n     $_"
+				if ($null -ne $Script.Packages) {
+					$script:Packages = $Script.Packages
 				}
-			} elseif ($RunCmd -isnot [string]) {
+			} elseif ($Script -is [string]) {
+				$RunCmd = $Script
+			} else {
 				Write-PwrFatal "wrong JSON type for value of '$Name', expected string or object"
 			}
 			if ($env:PwrShellPackages) {
@@ -869,7 +880,7 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.28'
+$env:PwrVersion = '0.4.29'
 
 if (-not $Run) {
 	switch ($Command) {
@@ -964,7 +975,6 @@ Get-PwrPackages
 Resolve-PwrPackageOverrides
 
 if ($Run) {
-	Assert-NonEmptyPwrPackages
 	Invoke-PwrScripts
 	exit
 }
@@ -982,7 +992,7 @@ switch ($Command) {
 				} elseif (Test-PwrPackage $Pkg) {
 					Write-PwrOutput "$($Pkg.Ref) already exists"
 				} else {
-					$Job += Invoke-PwrPackagePull $Pkg
+					Invoke-PwrPackagePull $Pkg ([ref]$Job)
 					$Pkgs += , $Pkg
 				}
 			}
@@ -1001,7 +1011,7 @@ switch ($Command) {
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
 				if (-not (Test-PwrPackage $Pkg)) {
-					$Job += Invoke-PwrPackagePull $Pkg
+					Invoke-PwrPackagePull $Pkg ([ref]$Job)
 					$Pkgs += , $Pkg
 				}
 				$PwrPkgs += , $Pkg
