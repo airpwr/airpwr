@@ -24,7 +24,7 @@ Use the following command in a `powershell` terminal to determine your PowerShel
 
 Open a `powershell` terminal and execute the following command:
 
-	iex (iwr 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1' -UseBasicParsing)
+	iex (& "$env:SYSTEMROOT\System32\curl.exe" -s --url 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1' | Out-String)
 
 The installer downloads the `pwr` cmdlet and puts its location on the user path.
 

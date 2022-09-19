@@ -123,6 +123,10 @@ Class SemanticVersion : System.IComparable {
 
 	SemanticVersion() { }
 
+	[bool]Equals([object]$Obj) {
+		return $this.CompareTo($Obj) -eq 0
+	}
+
 	[bool]LaterThan([object]$Obj) {
 		return $this.CompareTo($Obj) -gt 0
 	}
@@ -199,6 +203,12 @@ function Write-PwrInfo($Message) {
 				'Continue' {
 					Write-Pwr $Message
 				}
+				'Inquire' {
+					Write-Pwr $Message
+					if (-not $PSCmdlet.ShouldContinue($null, $null)) {
+						exit
+					}
+				}
 				'Stop' {
 					throw $Message
 				}
@@ -215,6 +225,12 @@ function Write-PwrDebug($Message) {
 			switch ($DebugPreference) {
 				'Continue' {
 					Write-Pwr $Message
+				}
+				'Inquire' {
+					Write-Pwr $Message
+					if (-not $PSCmdlet.ShouldContinue($null, $null)) {
+						exit
+					}
 				}
 				'Stop' {
 					throw $Message
@@ -255,6 +271,12 @@ function Write-PwrWarning($Message) {
 				'Continue' {
 					Write-Pwr $Message -ForegroundColor Yellow -Override
 				}
+				'Inquire' {
+					Write-Pwr $Message -ForegroundColor Yellow -Override
+					if (-not $PSCmdlet.ShouldContinue($null, $null)) {
+						exit
+					}
+				}
 				'Stop' {
 					throw $Message
 				}
@@ -276,7 +298,11 @@ function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing
 	if ($OutFile) {
 		$Expr += " --output '$OutFile'"
 	}
-	return Invoke-Expression $Expr
+	$Content = Invoke-Expression $Expr
+	if ($global:LASTEXITCODE) {
+		Write-PwrFatal "command 'curl.exe' finished with non-zero exit value $global:LASTEXITCODE"
+	}
+	return $Content
 }
 
 function Get-StringHash($S) {
@@ -441,7 +467,7 @@ function Assert-PwrPackage($Pkg) {
 }
 
 function Compare-PwrTags {
-	$Cache = "$PwrPath\cache\PwrTags"
+	$Cache = "$PwrPath\cache\tags"
 	$CacheExists = Test-Path $Cache
 	if ($CacheExists) {
 		$LastWrite = [DateTime]::Parse((Get-Item $Cache).LastWriteTime)
@@ -452,7 +478,9 @@ function Compare-PwrTags {
 			$Req = Invoke-PwrWebRequest -Uri 'https://api.github.com/repos/airpwr/airpwr/tags' -UseBasicParsing
 			mkdir (Split-Path $Cache -Parent) -Force | Out-Null
 			[IO.File]::WriteAllText($Cache, $Req)
-		} catch { }
+		} catch {
+			Write-PwrWarning $_
+		}
 	}
 	$Tags = Get-Content $Cache -ErrorAction SilentlyContinue | ConvertFrom-Json
 	$Latest = [SemanticVersion]::new()
@@ -880,7 +908,8 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.29'
+$env:PwrVersion = '0.4.30'
+Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if (-not $Run) {
 	switch ($Command) {
@@ -908,23 +937,38 @@ if (-not $Run) {
 			if ($Offline) {
 				Write-PwrFatal 'cannot update while running offline'
 			} else {
-				$PwrCmd = "$PwrPath\cmd"
-				$PwrScriptPath = "$PwrCmd\pwr.ps1"
-				mkdir $PwrCmd -Force | Out-Null
-				Invoke-PwrWebRequest -UseBasicParsing 'https://api.github.com/repos/airpwr/airpwr/contents/src/pwr.ps1' | ConvertFrom-Json | ForEach-Object {
-					$Content = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_.Content))
-					[IO.File]::WriteAllText($PwrScriptPath, $Content)
+				$CurrentVersion = [SemanticVersion]::new("$env:PwrVersion")
+				$local:Tags = Invoke-PwrWebRequest 'https://api.github.com/repos/airpwr/airpwr/tags' | ConvertFrom-Json
+				$local:Latest = [SemanticVersion]::new($local:Tags[0].Name.Substring(1))
+				if ($local:Latest.LaterThan($CurrentVersion)) {
+					if ((($CurrentVersion.Major -ne $local:Latest.Major) -or ($CurrentVersion.Minor -ne $local:Latest.Minor)) -and (-not $PSCmdlet.ShouldContinue($null, "Updating from pwr version $CurrentVersion to $local:Latest"))) {
+						exit
+					}
+					$PwrCmd = "$PwrPath\cmd"
+					$PwrScriptPath = "$PwrCmd\pwr.ps1"
+					mkdir $PwrCmd -Force | Out-Null
+					Invoke-PwrWebRequest "https://api.github.com/repos/airpwr/airpwr/contents/src/pwr.ps1?ref=v$local:Latest" | ConvertFrom-Json | ForEach-Object {
+						$Content = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_.Content))
+						[IO.File]::WriteAllText($PwrScriptPath, $Content)
+					}
+					$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+					if (-not $UserPath.Contains($PwrCmd)) {
+						[Environment]::SetEnvironmentVariable('Path', "$UserPath;$PwrCmd", 'User')
+					}
+					if (-not "$env:Path".Contains($PwrCmd)) {
+						$env:Path = "$env:Path;$PwrCmd"
+					}
+					$CacheDir = "$PwrPath\cache"
+					Remove-Item $CacheDir -Recurse -Force | Out-Null
+					$TagsCache = "$CacheDir\tags"
+					mkdir (Split-Path $TagsCache -Parent) -Force | Out-Null
+					[IO.File]::WriteAllText($TagsCache, ($local:Tags | ConvertTo-Json -Compress))
+					$env:PwrVersion = $null
+					& $PwrScriptPath | Out-Null
+					Write-PwrOutput "version $env:PwrVersion sha256:$((Get-FileHash -Path $PwrScriptPath -Algorithm SHA256).Hash.ToLower())"
+				} else {
+					Write-PwrOutput "already running latest version $CurrentVersion"
 				}
-				$UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-				if (-not $UserPath.Contains($PwrCmd)) {
-					[Environment]::SetEnvironmentVariable('Path', "$UserPath;$PwrCmd", 'User')
-				}
-				if (-not "$env:Path".Contains($PwrCmd)) {
-					$env:Path = "$env:Path;$PwrCmd"
-				}
-				$env:PwrVersion = $null
-				& $PwrScriptPath | Out-Null
-				Write-PwrOutput "version $env:PwrVersion sha256:$((Get-FileHash -Path $PwrScriptPath -Algorithm SHA256).Hash.ToLower())"
 			}
 			exit
 		}
