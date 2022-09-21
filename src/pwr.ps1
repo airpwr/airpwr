@@ -94,6 +94,7 @@ param (
 	[switch]$Quiet,
 	[switch]$Silent,
 	[switch]$Override,
+	[ValidateScript({ ($Command -in '', 'sh', 'shell') -and ($_.Count -gt 0) })]
 	[string[]]$Run
 )
 
@@ -363,6 +364,9 @@ function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 	return Start-Job -ScriptBlock {
 		$Tmp, $Out = $Args
 		& "$env:SYSTEMROOT\System32\tar.exe" -xzf $Tmp -C $Out --exclude 'Hives/*' --strip-components 1
+		if ($global:LASTEXITCODE) {
+			throw
+		}
 		Remove-Item $Tmp
 	} -ArgumentList $Tmp, $Out
 }
@@ -560,7 +564,14 @@ function Invoke-PwrPackagePull($Pkg, [ref]$Job) {
 
 function Receive-PwrJob($Job, $Pkgs) {
 	if ($Job.Count -gt 0) {
-		Receive-Job -Job $Job -Wait -AutoRemoveJob
+		Receive-Job -Job $Job -Wait
+		foreach ($J in $Job) {
+			if ($J.State -eq 'Failed') {
+				Remove-Job $Job
+				Write-PwrFatal 'one or more jobs failed'
+			}
+		}
+		Remove-Job $Job
 		Write-PwrOutput "fetched $($Pkgs.Count) package$(if ($Pkgs.Count -ne 1) { 's' }) ($($Refs = foreach ($P in $Pkgs) { $P.Ref }; $Refs -join ', '))"
 	}
 }
