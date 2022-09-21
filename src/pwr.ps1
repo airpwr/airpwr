@@ -826,7 +826,7 @@ function Invoke-PwrScripts {
 	if ($PwrConfig.Scripts) {
 		$Name = $Run[0]
 		$Script = $PwrConfig.Scripts.$Name
-		if ($null -ne $Script) {
+		if (($null -ne $Script) -or ($Run.Count -ge 1)) {
 			if ($Script -is [PSCustomObject]) {
 				$Format = $Script.Format
 				if ($null -eq $Format) {
@@ -870,6 +870,18 @@ function Invoke-PwrScripts {
 				}
 			} elseif ($Script -is [string]) {
 				$RunCmd = $Script
+			} elseif ($Run.Count -eq 1) {
+				$RunCmd = $Run[0]
+			} elseif ($Run.Count -gt 1) {
+				$FormatArgs = @()
+				for ($I = 1; $I -lt $Run.Count; ++$I) {
+					$FormatArgs[$I - 1] = $Run[$I]
+				}
+				try {
+					$RunCmd = [string]::Format($Run[0], [object[]]$FormatArgs)
+				} catch {
+					Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$($Run[0])', see below`n     $_"
+				}
 			} else {
 				Write-PwrFatal "wrong JSON type for value of '$Name', expected string or object"
 			}
@@ -908,10 +920,10 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.30'
+$env:PwrVersion = '0.4.31'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
-if (-not $Run) {
+if ($null -eq $Run) {
 	switch ($Command) {
 		{$_ -in 'v', 'version'} {
 			if ($AssertMinimum) {
@@ -1018,7 +1030,7 @@ $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
 Resolve-PwrPackageOverrides
 
-if ($Run) {
+if ($null -ne $Run) {
 	Invoke-PwrScripts
 	exit
 }
