@@ -130,8 +130,6 @@ function Assert-PwrArguments {
 			Write-PwrFatal "only commands 'shell', and '' are compatible with -Run: $Command"
 		} elseif ($Run.Count -eq 0) {
 			Write-PwrFatal 'no run arguments provided'
-		} elseif ($Packages.Count -gt 0 -and $Run.Count -gt 1) {
-			Write-PwrFatal "expected exactly one run argument: $Run"
 		}
 	}
 	if ($Override -and $Packages.Count -eq 0) {
@@ -942,6 +940,9 @@ function Invoke-PwrScriptCommand($Script) {
 
 function Invoke-PwrScripts {
 	if ($Packages.Count -gt 0) {
+		if ($Run.Count -ne 1) {
+			Write-PwrFatal "expected exactly one run argument: $Run"
+		}
 		Invoke-PwrScriptCommand @{Command = $Run[0]}
 	} elseif ($PwrConfig) {
 		$Name = $Run[0]
