@@ -94,7 +94,6 @@ param (
 	[switch]$Quiet,
 	[switch]$Silent,
 	[switch]$Override,
-	[ValidateScript({ ($Command -in '', 'sh', 'shell') -and ($_.Count -gt 0) })]
 	[string[]]$Run
 )
 
@@ -127,10 +126,10 @@ function Write-PwrFatal($Message) {
 
 function Assert-PwrArguments {
 	if ($null -ne $Run) {
-		if ($Run.Count -eq 0) {
-			Write-PwrFatal 'no run arguments provided'
-		} elseif ($Command -notin '', 'shell', 'sh') {
+		if ($Command -notin '', 'shell', 'sh') {
 			Write-PwrFatal "only commands 'shell', and '' are compatible with -Run: $Command"
+		} elseif ($Run.Count -eq 0) {
+			Write-PwrFatal 'no run arguments provided'
 		} elseif ($Packages.Count -gt 0 -and $Run.Count -gt 1) {
 			Write-PwrFatal "expected exactly one run argument: $Run"
 		}
