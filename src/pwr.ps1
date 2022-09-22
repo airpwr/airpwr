@@ -98,6 +98,8 @@ param (
 	[string[]]$Run
 )
 
+$WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.OffsetInLine -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
+
 function Write-Pwr($Message, $ForegroundColor, [switch]$NoNewline, [switch]$Override) {
 	if ($WriteToHost) {
 		$PwrColor = if ($Override) { $ForegroundColor } else { 'Blue' }
@@ -216,8 +218,6 @@ if ([Environment]::OSVersion.Version.Build -lt 17063) {
 } elseif ($PSVersionTable.PSVersion.Major -lt 5) {
 	Write-PwrFatal "powershell version $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor) does not meet minimum required version 5.0"
 }
-
-$WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.OffsetInLine -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
 
 function Write-PwrOutput($Message, $ForegroundColor, [switch]$NoNewline) {
 	if (-not $Quiet -and -not $Silent) {
