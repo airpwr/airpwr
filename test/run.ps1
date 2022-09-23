@@ -9,6 +9,7 @@ function Invoke-PwrAssertTrue($block) {
 	$result = Invoke-Command -ScriptBlock $block
 	if ((-not $?) -or (-not $result)) {
 		Write-Error "Assertion Failed: $block"
+		throw
 	}
 }
 
@@ -21,6 +22,7 @@ function Invoke-PwrAssertThrows($block) {
 	}
 	if ($LASTEXITCODE -eq 0) {
 		Write-Error "Assertion Failed to Throw: $block"
+		throw
 	}
 }
 
@@ -221,21 +223,21 @@ function Test-Pwr-DefaultConfig {
 }
 
 function Test-Pwr-Run {
-	pwr -packages "file:///$PSScriptRoot\pkg1" -run print
+	pwr -run print
 	Invoke-PwrAssertTrue {
-		$LastExitCode -eq 2
+		$global:LastExitCode -eq 2
 	}
 }
 
 function Test-Pwr-RunWithArgs {
-	pwr -packages "file:///$PSScriptRoot\pkg1" -run set, 1, 2, 3
+	pwr -run set, 1, 2, 3
 	Invoke-PwrAssertTrue {
 		$LastExitCode -eq 2
 	}
 }
 
 function Test-Pwr-RunWithDefaultArgs {
-	pwr -packages "file:///$PSScriptRoot\pkg1" -run setA
+	pwr -run setA
 	Invoke-PwrAssertTrue {
 		$LastExitCode -eq 2
 	}
