@@ -949,8 +949,8 @@ function Invoke-PwrScripts {
 		$Script = $PwrConfig.Scripts.$Name
 		if (($null -ne $Script) -or ($Run.Count -ge 1)) {
 			$Location = Get-Location
+			Set-Location (Split-Path $PwrConfigPath -Parent)
 			try {
-				Set-Location (Split-Path $PwrConfigPath -Parent)
 				Invoke-PwrScriptCommand $Script
 			} finally {
 				Set-Location $Location
@@ -959,7 +959,7 @@ function Invoke-PwrScripts {
 			Write-PwrFatal "no declared script '$Name'"
 		}
 	} else {
-		Write-PwrFatal "no packages provided"
+		Write-PwrFatal 'no packages provided'
 	}
 }
 
