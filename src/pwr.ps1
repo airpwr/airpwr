@@ -97,6 +97,54 @@ param (
 	[string[]]$Run
 )
 
+$WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.OffsetInLine -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
+
+function Write-Pwr($Message, $ForegroundColor, [switch]$NoNewline, [switch]$Override) {
+	if ($WriteToHost) {
+		$PwrColor = if ($Override) { $ForegroundColor } else { 'Blue' }
+		Write-Host 'pwr: ' -ForegroundColor $PwrColor -NoNewline
+		if ($ForegroundColor) {
+			Write-Host $Message -ForegroundColor $ForegroundColor -NoNewline:$NoNewline
+		} else {
+			Write-Host $Message -NoNewline:$NoNewline
+		}
+	} else {
+		Write-Output "pwr: $Message"
+	}
+}
+
+function Write-PwrFatal($Message) {
+	if (-not $Silent) {
+		if ($WriteToHost) {
+			Write-Pwr $Message -ForegroundColor Red -Override
+		} else {
+			Write-Error "pwr: $Message" -ErrorAction Continue
+		}
+	}
+	exit 1
+}
+
+function Assert-PwrArguments {
+	if ($null -ne $Run) {
+		if ($Command -notin '', 'shell', 'sh') {
+			Write-PwrFatal "only commands 'shell', and '' are compatible with -Run: $Command"
+		} elseif ($Run.Count -eq 0) {
+			Write-PwrFatal 'no run arguments provided'
+		}
+	}
+	if ($Override -and $Packages.Count -eq 0) {
+		Write-PwrFatal 'expected packages for switch -Override'
+	}
+	if ($Installed -and $Command -notin 'ls', 'list') {
+		Write-PwrFatal "only command 'list' is compatible with switch -Installed: $Command"
+	}
+	if ($AssertMinimum -and $Command -notin 'v', 'version') {
+		Write-PwrFatal "only command 'version' is compatible with flag -AssertMinimum: $Command"
+	}
+}
+
+Assert-PwrArguments
+
 Class SemanticVersion : System.IComparable {
 
 	[int]$Major = 0
@@ -168,22 +216,6 @@ if ([Environment]::OSVersion.Version.Build -lt 17063) {
 	Write-PwrFatal "powershell version $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor) does not meet minimum required version 5.0"
 }
 
-$WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.OffsetInLine -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
-
-function Write-Pwr($Message, $ForegroundColor, [switch]$NoNewline, [switch]$Override) {
-	if ($WriteToHost) {
-		$PwrColor = if ($Override) { $ForegroundColor } else { 'Blue' }
-		Write-Host 'pwr: ' -ForegroundColor $PwrColor -NoNewline
-		if ($ForegroundColor) {
-			Write-Host $Message -ForegroundColor $ForegroundColor -NoNewline:$NoNewline
-		} else {
-			Write-Host $Message -NoNewline:$NoNewline
-		}
-	} else {
-		Write-Output "pwr: $Message"
-	}
-}
-
 function Write-PwrOutput($Message, $ForegroundColor, [switch]$NoNewline) {
 	if (-not $Quiet -and -not $Silent) {
 		Write-Pwr $Message -ForegroundColor $ForegroundColor -NoNewline:$NoNewline
@@ -240,17 +272,6 @@ function Write-PwrDebug($Message) {
 			Write-Debug "pwr: $Message"
 		}
 	}
-}
-
-function Write-PwrFatal($Message) {
-	if (-not $Silent) {
-		if ($WriteToHost) {
-			Write-Pwr $Message -ForegroundColor Red -Override
-		} else {
-			Write-Error "pwr: $Message" -ErrorAction Continue
-		}
-	}
-	exit 1
 }
 
 function Write-PwrThrow($Message) {
@@ -363,6 +384,9 @@ function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 	return Start-Job -ScriptBlock {
 		$Tmp, $Out = $Args
 		& "$env:SYSTEMROOT\System32\tar.exe" -xzf $Tmp -C $Out --exclude 'Hives/*' --strip-components 1
+		if ($global:LASTEXITCODE) {
+			throw
+		}
 		Remove-Item $Tmp
 	} -ArgumentList $Tmp, $Out
 }
@@ -454,7 +478,7 @@ function Assert-PwrPackage($Pkg) {
 		}
 		if ($P.Tag) {
 			$P.Repo = $Repo
-			$P.Ref = "$($P.Name):$($P.Version)"
+			$P.Ref = "$($P.Name):$($P.Version)$(if ($P.Config -ne 'default') { ":$($P.Config)" })"
 			return $P
 		}
 	}
@@ -560,7 +584,14 @@ function Invoke-PwrPackagePull($Pkg, [ref]$Job) {
 
 function Receive-PwrJob($Job, $Pkgs) {
 	if ($Job.Count -gt 0) {
-		Receive-Job -Job $Job -Wait -AutoRemoveJob
+		Receive-Job -Job $Job -Wait
+		foreach ($J in $Job) {
+			if ($J.State -eq 'Failed') {
+				Remove-Job $Job
+				Write-PwrFatal 'one or more jobs failed'
+			}
+		}
+		Remove-Job $Job
 		Write-PwrOutput "fetched $($Pkgs.Count) package$(if ($Pkgs.Count -ne 1) { 's' }) ($($Refs = foreach ($P in $Pkgs) { $P.Ref }; $Refs -join ', '))"
 	}
 }
@@ -822,96 +853,123 @@ function Exit-Shell {
 	}
 }
 
+function Invoke-PwrScriptCommand($Script) {
+	if ($Script -is [PSCustomObject]) {
+		$Format = $Script.Format
+		if ($null -eq $Format) {
+			$RunCmd = $Script.Command
+			if ($null -eq $RunCmd) {
+				Write-PwrFatal "missing JSON key, expected one of 'format' or 'command' in script '$Name'"
+			} elseif ($RunCmd -isnot [string]) {
+				Write-PwrFatal "wrong JSON type for value of 'command', expected string in script '$Name'"
+			}
+		} elseif ($Format -isnot [string]) {
+			Write-PwrFatal "wrong JSON type for value of 'format', expected string in script '$Name'"
+		} elseif ($null -ne $Script.Command) {
+			Write-PwrFatal "cannot specify 'command' when 'format' is provided in script '$Name'"
+		} else {
+			$FormatArgs = @($Name)
+			if ($Script.Args -is [Array]) {
+				foreach ($A in $Script.Args) {
+					if ($A -isnot [string]) {
+						Write-PwrFatal "wrong JSON type for item of array 'args', expected string"
+					}
+					$FormatArgs += $A
+				}
+			} elseif ($null -ne $Script.Args) {
+				Write-PwrFatal "wrong JSON type for value of 'args', expected array"
+			}
+			for ($I = 1; $I -lt $Run.Count; ++$I) {
+				if ($I -lt $FormatArgs.Count) {
+					$FormatArgs[$I] = $Run[$I]
+				} else {
+					$FormatArgs += $Run[$I]
+				}
+			}
+			try {
+				$RunCmd = [string]::Format($Format, [object[]]$FormatArgs)
+			} catch {
+				Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$Format', see below`n     $_"
+			}
+		}
+		if ($null -ne $Script.Packages) {
+			$script:Packages = $Script.Packages
+		}
+	} elseif ($Script -is [string]) {
+		$RunCmd = $Script
+	} elseif ($Run.Count -eq 1) {
+		$RunCmd = $Run[0]
+	} elseif ($Run.Count -gt 1) {
+		$FormatArgs = @()
+		for ($I = 1; $I -lt $Run.Count; ++$I) {
+			$FormatArgs[$I - 1] = $Run[$I]
+		}
+		try {
+			$RunCmd = [string]::Format($Run[0], [object[]]$FormatArgs)
+		} catch {
+			Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$($Run[0])', see below`n     $_"
+		}
+	} else {
+		Write-PwrFatal "wrong JSON type for value of '$Name', expected string or object"
+	}
+	if ($env:PwrShellPackages) {
+		Write-PwrFatal "cannot invoke script due to shell session already in progress"
+	}
+	try {
+		Enter-Shell
+	} catch {
+		exit 1
+	}
+	$ScriptExitCode = $global:LASTEXITCODE = 0
+	try {
+		Invoke-Expression $RunCmd
+		$ScriptExitCode = $global:LASTEXITCODE
+	} catch {
+		$ErrorMessage = $_.ToString().Trim()
+	} finally {
+		if ($env:PwrShellPackages) {
+			Exit-Shell
+		}
+	}
+	if ($ErrorMessage) {
+		Write-PwrFatal "script '$Name' failed to execute command '$RunCmd'`n     $(foreach ($Line in $ErrorMessage.Split("`r`n")) { '>> ' + $Line })"
+	} elseif ($ScriptExitCode -ne 0) {
+		Write-PwrFatal "script '$Name' finished with non-zero exit value $ScriptExitCode`n     see output above for command '$RunCmd'"
+	}
+}
+
 function Invoke-PwrScripts {
-	if ($PwrConfig.Scripts) {
+	if ($Packages.Count -gt 0) {
+		if ($Run.Count -ne 1) {
+			Write-PwrFatal "expected exactly one run argument: $Run"
+		}
+		Invoke-PwrScriptCommand @{Command = $Run[0]}
+	} elseif ($PwrConfig) {
 		$Name = $Run[0]
 		$Script = $PwrConfig.Scripts.$Name
-		if ($null -ne $Script) {
-			if ($Script -is [PSCustomObject]) {
-				$Format = $Script.Format
-				if ($null -eq $Format) {
-					$RunCmd = $Script.Command
-					if ($null -eq $RunCmd) {
-						Write-PwrFatal "missing JSON key, expected one of 'format' or 'command' in script '$Name'"
-					} elseif ($RunCmd -isnot [string]) {
-						Write-PwrFatal "wrong JSON type for value of 'command', expected string in script '$Name'"
-					}
-				} elseif ($Format -isnot [string]) {
-					Write-PwrFatal "wrong JSON type for value of 'format', expected string in script '$Name'"
-				} elseif ($null -ne $Script.Command) {
-					Write-PwrFatal "cannot specify 'command' when 'format' is provided in script '$Name'"
-				} else {
-					$FormatArgs = @($Name)
-					if ($Script.Args -is [Array]) {
-						foreach ($A in $Script.Args) {
-							if ($A -isnot [string]) {
-								Write-PwrFatal "wrong JSON type for item of array 'args', expected string"
-							}
-							$FormatArgs += $A
-						}
-					} elseif ($null -ne $Script.Args) {
-						Write-PwrFatal "wrong JSON type for value of 'args', expected array"
-					}
-					for ($I = 1; $I -lt $Run.Count; ++$I) {
-						if ($I -lt $FormatArgs.Count) {
-							$FormatArgs[$I] = $Run[$I]
-						} else {
-							$FormatArgs += $Run[$I]
-						}
-					}
-					try {
-						$RunCmd = [string]::Format($Format, [object[]]$FormatArgs)
-					} catch {
-						Write-PwrFatal "bad input [$($FormatArgs -join ', ')] for format '$Format', see below`n     $_"
-					}
-				}
-				if ($null -ne $Script.Packages) {
-					$script:Packages = $Script.Packages
-				}
-			} elseif ($Script -is [string]) {
-				$RunCmd = $Script
-			} else {
-				Write-PwrFatal "wrong JSON type for value of '$Name', expected string or object"
-			}
-			if ($env:PwrShellPackages) {
-				Write-PwrFatal "cannot invoke script due to shell session already in progress"
-			}
+		if (($null -ne $Script) -or ($Run.Count -ge 1)) {
+			$Location = Get-Location
+			Set-Location (Split-Path $PwrConfigPath -Parent)
 			try {
-				Enter-Shell
-			} catch {
-				exit 1
-			}
-			$ScriptExitCode = $global:LASTEXITCODE = 0
-			try {
-				Invoke-Expression $RunCmd
-				$ScriptExitCode = $global:LASTEXITCODE
-			} catch {
-				$ErrorMessage = $_.ToString().Trim()
+				Invoke-PwrScriptCommand $Script
 			} finally {
-				if ($env:PwrShellPackages) {
-					Exit-Shell
-				}
-			}
-			if ($ErrorMessage) {
-				Write-PwrFatal "script '$Name' failed to execute command '$RunCmd'`n     $(foreach ($Line in $ErrorMessage.Split("`r`n")) { '>> ' + $Line })"
-			} elseif ($ScriptExitCode -ne 0) {
-				Write-PwrFatal "script '$Name' finished with non-zero exit value $ScriptExitCode`n     see output above for command '$RunCmd'"
+				Set-Location $Location
 			}
 		} else {
 			Write-PwrFatal "no declared script '$Name'"
 		}
 	} else {
-		Write-PwrFatal "no scripts declared in $PwrConfigPath"
+		Write-PwrFatal 'no packages provided'
 	}
 }
 
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.30'
+$env:PwrVersion = '0.4.31'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
-if (-not $Run) {
+if ($null -eq $Run) {
 	switch ($Command) {
 		{$_ -in 'v', 'version'} {
 			if ($AssertMinimum) {
@@ -1018,7 +1076,7 @@ $PwrRepositories = Get-PwrRepositories
 Get-PwrPackages
 Resolve-PwrPackageOverrides
 
-if ($Run) {
+if ($null -ne $Run) {
 	Invoke-PwrScripts
 	exit
 }
