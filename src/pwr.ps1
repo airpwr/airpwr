@@ -80,7 +80,7 @@ param (
 	[ValidateSet('v', 'version', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'rm', 'remove', 'which', 'where')]
 	[string]$Command,
 	[Parameter(Position = 1)]
-	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]+)|latest|(?=:))(:([a-zA-Z0-9_-]+))?)?))$')]
+	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]+(\+[0-9]+)?)|latest|(?=:))(:([a-zA-Z0-9_-]+))?)?))$')]
 	[string[]]$Packages,
 	[string[]]$Repositories,
 	[switch]$Fetch,
@@ -166,7 +166,7 @@ Class SemanticVersion : System.IComparable {
 	}
 
 	SemanticVersion([string]$Version) {
-		$this.Init($Version, '^([0-9]+)\.([0-9]+)\.([0-9]+)(\+[0-9]+)?$')
+		$this.Init($Version, '^([0-9]+)\.([0-9]+)\.([0-9]+)((\+|_)[0-9]+)?$')
 	}
 
 	SemanticVersion() { }
@@ -438,14 +438,15 @@ function Split-PwrPackage($Pkg) {
 }
 
 function Get-LatestVersion($Pkgs, $Version) {
-	if ($Version -match '^([0-9]+)(\.[0-9]+)?$') {
+	if ($Version -match '^([0-9]+)(\.[0-9]+)?(\.[0-9]+)?$') {
 		$local:Major = [int]$Matches[1]
 		$local:Minor = if ($Matches[2]) { [int]$Matches[2].Substring(1) }
+		$local:Patch = if ($Matches[3]) { [int]$Matches[3].Substring(1) }
 	}
 	$Latest = $null
 	foreach ($V in $Pkgs) {
-		$Ver = [SemanticVersion]::new($V, '([0-9]+)\.([0-9]+)\.([0-9]+)')
-		if (((-not $Latest) -or $Ver.LaterThan($Latest)) -and ((-not $local:Major) -or ($Ver.Major -eq $local:Major)) -and ((-not $local:Minor) -or ($Ver.Minor -eq $local:Minor))) {
+		$Ver = [SemanticVersion]::new($V)
+		if (((-not $Latest) -or $Ver.LaterThan($Latest)) -and ((-not $local:Major) -or ($Ver.Major -eq $local:Major)) -and ((-not $local:Minor) -or ($Ver.Minor -eq $local:Minor)) -and ((-not $local:Patch) -or ($Ver.Patch -eq $local:Patch))) {
 			$Latest = $Ver
 		}
 	}
@@ -469,14 +470,15 @@ function Assert-PwrPackage($Pkg) {
 			$Latest = Get-LatestVersion $Repo.Packages.$Name
 			$P.Tag = "$Name-$Latest"
 			$P.Version = $Latest
-		} elseif ($Version -match '^([0-9]+\.){2}[0-9]+$' -and ($Version -in $Repo.Packages.$Name)) {
+		} elseif ($Version -match '^([0-9]+\.){2}[0-9]+(\+[0-9]+)$' -and ($Version -in $Repo.Packages.$Name)) {
 			$P.Tag = "$Name-$Version"
-		} elseif ($Version -match '^[0-9]+(\.[0-9]+)?$') {
+		} elseif ($Version -match '^[0-9]+(\.[0-9]+){0,2}$') {
 			$Latest = Get-LatestVersion $Repo.Packages.$Name $Version
 			$P.Tag = "$Name-$Latest"
 			$P.Version = $Latest
 		}
 		if ($P.Tag) {
+			$P.Tag = $P.Tag.Replace('+', '_')
 			$P.Repo = $Repo
 			$P.Ref = "$($P.Name):$($P.Version)$(if ($P.Config -ne 'default') { ":$($P.Config)" })"
 			return $P
@@ -966,7 +968,7 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.31'
+$env:PwrVersion = '0.4.32'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
