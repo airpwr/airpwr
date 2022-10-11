@@ -97,7 +97,7 @@ param (
 	[string[]]$Run
 )
 
-$WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.OffsetInLine -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
+$WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
 
 function Write-Pwr($Message, $ForegroundColor, [switch]$NoNewline, [switch]$Override) {
 	if ($WriteToHost) {
