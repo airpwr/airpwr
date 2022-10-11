@@ -968,7 +968,7 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.32'
+$env:PwrVersion = '0.4.33'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
@@ -1055,9 +1055,8 @@ function Get-PwrConfig {
 }
 
 function Lock-PwrLock {
-	try {
-		New-Item $PwrLock -ItemType File -WhatIf:$false | Out-Null
-	} catch {
+	New-Item $PwrLock -ItemType File -WhatIf:$false -ErrorAction SilentlyContinue | Out-Null
+	if (-not $?) {
 		Write-PwrFatal "already fetching or removing package`n     if this isn't the case, manually delete $PwrLock"
 	}
 }
