@@ -446,7 +446,7 @@ function Get-LatestVersion($Pkgs, $Version) {
 	$Latest = $null
 	foreach ($V in $Pkgs) {
 		$Ver = [SemanticVersion]::new($V)
-		if (((-not $Latest) -or $Ver.LaterThan($Latest)) -and ((-not $local:Major) -or ($Ver.Major -eq $local:Major)) -and ((-not $local:Minor) -or ($Ver.Minor -eq $local:Minor)) -and ((-not $local:Patch) -or ($Ver.Patch -eq $local:Patch))) {
+		if ((($null -eq $Latest) -or $Ver.LaterThan($Latest)) -and (($null -eq $local:Major) -or ($Ver.Major -eq $local:Major)) -and (($null -eq $local:Minor) -or ($Ver.Minor -eq $local:Minor)) -and (($null -eq $local:Patch) -or ($Ver.Patch -eq $local:Patch))) {
 			$Latest = $Ver
 		}
 	}
@@ -968,7 +968,7 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.33'
+$env:PwrVersion = '0.4.34'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
