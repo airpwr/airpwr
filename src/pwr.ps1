@@ -15,6 +15,7 @@
 	home			Displays the pwr home path
 	help, h			Displays syntax and descriptive information for calling pwr
 	version, v		Displays this verion of pwr
+	prune			Removes out-of-date packages from the local machine
 	remove, rm		Removes package data from the local machine
 	update			Updates the pwr command to the latest version
 	which			Displays the package version and digest
@@ -57,13 +58,10 @@
 	Overrides 'pwr.json' package versions with the versions provided by the `Packages` parameter
 	The package must be declared in the configuration file
 	The package must not be expressed by a file URI
-.PARAMETER DaysOld
-	Use with the `remove` command to delete packages that have not been used within the specified period of days
-	When this parameter is used, `Packages` must be empty
 .PARAMETER Installed
 	Use with the `list` command to enumerate the packages installed on the local machine
 .PARAMETER WhatIf
-	Use with the `remove` command to show the dry-run of packages to remove
+	Use with the `remove` or `prune` commands to show the dry-run of packages that will be removed
 .PARAMETER Run
 	Executes the user-defined script inside a shell session
 	The script is declared like `{ ..., "scripts": { "name": "something to run" } }` in 'pwr.json'
@@ -77,7 +75,7 @@
 [CmdletBinding(SupportsShouldProcess)]
 param (
 	[Parameter(Position = 0)]
-	[ValidateSet('v', 'version', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'rm', 'remove', 'which', 'where')]
+	[ValidateSet('v', 'version', 'home', '', 'h', 'help', 'update', 'exit', 'fetch', 'load', 'sh', 'shell', 'ls-config', 'ls', 'list', 'prune', 'rm', 'remove', 'which', 'where')]
 	[string]$Command,
 	[Parameter(Position = 1)]
 	[ValidatePattern('^((file:///.+)|([a-zA-Z0-9_-]+(:((([0-9]+\.){0,2}[0-9]+(\+[0-9]+)?)|latest|(?=:))(:([a-zA-Z0-9_-]+))?)?))$')]
@@ -166,7 +164,7 @@ Class SemanticVersion : System.IComparable {
 	}
 
 	SemanticVersion([string]$Version) {
-		$this.Init($Version, '^([0-9]+)\.([0-9]+)\.([0-9]+)((\+|_)[0-9]+)?$')
+		$this.Init($Version, '^([0-9]+)\.([0-9]+)\.([0-9]+)([_+][0-9]+)?$')
 	}
 
 	SemanticVersion() { }
@@ -416,6 +414,7 @@ function Split-PwrPackage($Pkg) {
 		$Uri = $Split[0].Trim()
 		return @{
 			Name = $Uri
+			Id = $Uri
 			Ref = $Uri
 			Local = $true
 			Path = (Resolve-Path $Uri.Substring(8)).Path
@@ -431,6 +430,7 @@ function Split-PwrPackage($Pkg) {
 	if ($Split.Count -ge 2 -and ($Split[1] -ne '')) {
 		$Props.Version = $Split[1]
 	}
+	$Props.Id = if ($Props.Version -eq 'latest') { $Props.Name } else { "$($Props.Name):$($Props.Version)" }
 	if ($Split.Count -ge 3 -and ($Split[2] -ne '')) {
 		$Props.Config = $Split[2]
 	}
@@ -558,7 +558,6 @@ function Get-PwrPackages {
 		}
 		$Repo.Packages = Get-Content $Cache -ErrorAction SilentlyContinue | ConvertFrom-Json
 	}
-
 }
 
 function Test-PwrPackage($Pkg) {
@@ -827,6 +826,7 @@ function Enter-Shell {
 	Assert-NonEmptyPwrPackages
 	Lock-PwrLock
 	try {
+		$LoadCache = Get-PwrLoadCache
 		$Job = $Pkgs = $PwrPkgs = @()
 		foreach ($P in $Packages) {
 			$Pkg = Assert-PwrPackage $P
@@ -835,8 +835,10 @@ function Enter-Shell {
 				$Pkgs += , $Pkg
 			}
 			$PwrPkgs += , $Pkg
+			Set-PwrLoadCache $LoadCache $Pkg.Id $Pkg.Tag
 		}
 		Receive-PwrJob $Job $Pkgs
+		Save-PwrLoadCache $LoadCache
 		Save-PSSessionState
 		$env:PwrShellPackages = "$($Refs = foreach ($P in $PwrPkgs) { $P.Ref }; $Refs -join ' ')"
 		Clear-PSSessionState
@@ -980,6 +982,124 @@ function Invoke-PwrScripts {
 	}
 }
 
+function Get-PwrLoadCache {
+	$LoadCacheFile = "$PwrPath\cache\load"
+	Write-PwrDebug 'loading load cache'
+	$LoadCache = @{
+		LoadMap = @{}
+		ObsoletePkgs = @{}
+	}
+	if (Test-Path -Path $LoadCacheFile -PathType Leaf) {
+		try {
+			$JsonObj = Get-Content $LoadCacheFile | ConvertFrom-Json
+			foreach ($Load in $JsonObj.Loads) {
+				$SplitAt = $Load.LastIndexOf(":")
+				$LoadCache.LoadMap[$Load.Substring(0, $SplitAt)] = $Load.Substring($SplitAt + 1)
+			}
+			foreach ($ObsoletePkg in $JsonObj.ObsoletePkgs) {
+				$SplitAt = $ObsoletePkg.LastIndexOf(":")
+				$LoadCache.ObsoletePkgs[$ObsoletePkg.Substring(0, $SplitAt)] = $ObsoletePkg.Substring($SplitAt + 1)
+			}
+		} catch {
+			Write-PwrFatal "bad JSON parse of file $LoadCacheFile - $_"
+		}
+	} else {
+		$InstalledPkgs = Get-InstalledPwrPackages
+		$InstalledPkgs.Keys | ForEach-Object {
+			$LoadCache.LoadMap[$_] = "$_-$($InstalledPkgs.$_[0].ToString().Replace('+', '_'))"
+		}
+	}
+	return $LoadCache
+}
+
+function Set-PwrLoadCache($LoadCache, $Id, $PkgTag) {
+	$OldTag = $LoadCache.LoadMap[$Id]
+	$LoadCache.LoadMap[$Id] = $PkgTag
+	$LoadCache.ObsoletePkgs.Remove($PkgTag)
+	if ($OldTag -and -not $LoadCache.LoadMap.ContainsValue($OldTag)) {
+		$LoadCache.ObsoletePkgs[$OldTag] = Get-Date -Format FileDateTimeUniversal
+		$EndOfName = $OldTag.LastIndexOf("-")
+		Write-PwrOutput "package $($OldTag.Substring(0, $EndOfName)):$($OldTag.Substring($EndOfName + 1)) is eligible for pruning"
+	}
+}
+
+function Save-PwrLoadCache($LoadCache) {
+	$LoadCacheFile = "$PwrPath\cache\load"
+	if ($PSCmdlet.ShouldProcess($LoadCacheFile, 'Save Load Cache')) {
+		Write-PwrDebug 'saving load cache'
+		mkdir (Split-Path $LoadCacheFile -Parent) -Force | Out-Null
+		$JsonObj = @{
+			Loads = @()
+			ObsoletePkgs = @()
+		}
+		$LoadCache.LoadMap.GetEnumerator() | ForEach-Object {
+			if (-not $_.Key.StartsWith('file:///')) {
+				$JsonObj.Loads += "$($_.Key):$($_.Value)"
+			}
+		}
+		$LoadCache.ObsoletePkgs.GetEnumerator() | ForEach-Object {
+			$JsonObj.ObsoletePkgs += "$($_.Key):$($_.Value)"
+		}
+		[IO.File]::WriteAllText($LoadCacheFile, ($JsonObj | ConvertTo-Json -Compress))
+	}
+}
+
+function Prune-PwrPackages($LoadCache, $ObsoleteDays) {
+	$TagsToKeep = $LoadCache.LoadMap.Values
+	$ProcessedTags = @()
+	$Pkgs = Get-InstalledPwrPackages
+	$StalePkgs = @()
+	foreach ($Name in $Pkgs.Keys) {
+		foreach ($Ver in $Pkgs.$Name) {
+			$Tag = "$Name-$($Ver.ToString().Replace('+', '_'))"
+			$ProcessedTags += $Tag
+			$PkgRoot = "$PwrPkgPath\$Tag"
+			if ($Tag -NotIn $TagsToKeep) {
+				# Check how long the tag has been obsolete, and remove it if beyond the number of days specified
+				$ObsoleteDate = $LoadCache.ObsoletePkgs[$Tag]
+				if (-not $ObsoleteDate) {
+					$ObsoleteDate = Get-Date -Format FileDateTimeUniversal
+					$LoadCache.ObsoletePkgs[$Tag] = $ObsoleteDate
+					Write-PwrOutput "package ${Name}:$Ver is eligible for pruning"
+				}
+				if ((-not $ObsoleteDays -or [DateTime]::ParseExact($ObsoleteDate, 'yyyyMMddTHHmmssffffZ', $null) -lt ((Get-Date) - (New-TimeSpan -Days $ObsoleteDays))) -and $PSCmdlet.ShouldProcess($Tag, 'Prune pwr Tag')) {
+					Write-PwrOutput "pruning ${Name}:$Ver ... " -NoNewline
+					Remove-Directory "$PkgRoot"
+					$LoadCache.ObsoletePkgs.Remove($Tag)
+					Write-PwrHost 'done'
+				}
+			} else { # Check for stale packages (>= 180 days without use)
+				try {
+					$Item = Get-ChildItem -Path "$PkgRoot\.pwr" -ErrorAction Stop
+					if ($Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days 180))) {
+						$StalePkgs += "${Name}:$Ver"
+					}
+				} catch {
+					Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
+				}
+			}
+		}
+	}
+	if ($StalePkgs.Count -gt 0) {
+		Write-PwrOutput "consider removing stale pwr packages: $($StalePkgs -join ', ')"
+	}
+	# Clean up load cache (non-existant packages will be removed from the maps)
+	$OldLoadMap = $LoadCache.LoadMap
+	$OldObsoletePkgs = $LoadCache.ObsoletePkgs
+	$LoadCache.LoadMap = @{}
+	$LoadCache.ObsoletePkgs = @{}
+	foreach ($Id in $OldLoadMap.Keys) {
+		if ($OldLoadMap[$Id] -In $ProcessedTags) {
+			$LoadCache.LoadMap[$Id] = $OldLoadMap[$Id]
+		}
+	}
+	foreach ($Tag in $OldObsoletePkgs.Keys) {
+		if ($Tag -In $ProcessedTags) {
+			$LoadCache.ObsoletePkgs[$Tag] = $OldObsoletePkgs[$Tag]
+		}
+	}
+}
+
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
@@ -1102,6 +1222,7 @@ switch ($Command) {
 		Assert-NonEmptyPwrPackages
 		Lock-PwrLock
 		try {
+			$LoadCache = Get-PwrLoadCache
 			$Job = $Pkgs = @()
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
@@ -1113,8 +1234,10 @@ switch ($Command) {
 					Invoke-PwrPackagePull $Pkg ([ref]$Job)
 					$Pkgs += , $Pkg
 				}
+				Set-PwrLoadCache $LoadCache $Pkg.Id $Pkg.Tag
 			}
 			Receive-PwrJob $Job $Pkgs
+			Save-PwrLoadCache $LoadCache
 		} finally {
 			Unlock-PwrLock
 		}
@@ -1125,6 +1248,7 @@ switch ($Command) {
 		$_Path = $env:Path
 		try {
 			$env:Path = $null
+			$LoadCache = Get-PwrLoadCache
 			$Job = $Pkgs = $PwrPkgs = @()
 			foreach ($P in $Packages) {
 				$Pkg = Assert-PwrPackage $P
@@ -1133,8 +1257,10 @@ switch ($Command) {
 					$Pkgs += , $Pkg
 				}
 				$PwrPkgs += , $Pkg
+				Set-PwrLoadCache $LoadCache $Pkg.Id $Pkg.Tag
 			}
 			Receive-PwrJob $Job $Pkgs
+			Save-PwrLoadCache $LoadCache
 			foreach ($Pkg in $PwrPkgs) {
 				if (-not "$env:PwrLoadedPackages".Contains($Pkg.Ref)) {
 					Invoke-PwrPackageShell $Pkg
@@ -1204,10 +1330,24 @@ switch ($Command) {
 			}
 		}
 	}
+	'prune' {
+		if ($Packages.Count -gt 0) {
+			Write-PwrFatal 'prune not compatible with -Packages'
+		}
+		Lock-PwrLock
+		try {
+			$LoadCache = Get-PwrLoadCache
+			Prune-PwrPackages $LoadCache
+			Save-PwrLoadCache $LoadCache
+		} finally {
+			Unlock-PwrLock
+		}
+	}
 	{$_ -in 'rm', 'remove'} {
 		Lock-PwrLock
 		try {
 			if ($DaysOld) {
+				Write-PwrWarning "-DaysOld is deprecated in favor of 'prune' and will be removed in a future version"
 				if ($Packages.Count -gt 0) {
 					Write-PwrFatal '-DaysOld not compatible with -Packages'
 				}

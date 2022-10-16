@@ -85,7 +85,7 @@ An `auths.json` might look like:
 # Usage
 
 	SYNTAX
-		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-DaysOld <Int32>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
+		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
 
 	PARAMETERS
 		-Command <String>
@@ -98,6 +98,7 @@ An `auths.json` might look like:
 			home			Displays the pwr home path
 			help, h			Displays syntax and descriptive information for calling pwr
 			version, v		Displays this verion of pwr
+			prune			Removes out-of-date packages from the local machine
 			remove, rm		Removes package data from the local machine
 			update			Updates the pwr command to the latest version
 			which			Displays the package version and digest
@@ -149,10 +150,6 @@ An `auths.json` might look like:
 			Overrides 'pwr.json' package versions with the versions provided by the `Packages` parameter
 			The package must be declared in the configuration file
 			The package must not be expressed by a file URI
-
-		-DaysOld <Int32>
-			Use with the `remove` command to delete packages that have not been used within the specified period of days
-			When this parameter is used, `Packages` must be empty
 
 		-Installed [<SwitchParameter>]
 			Use with the `list` command to enumerate the packages installed on the local machine
