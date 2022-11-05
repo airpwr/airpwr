@@ -761,6 +761,21 @@ function Get-InstalledPwrPackages {
 	return $Pkgs
 }
 
+function Select-PwrPackages([parameter(ValueFromPipeline=$True)]$Pkgs) {
+	if (-not $Packages) {
+		return $Pkgs
+	}
+	$Out = @{}
+	foreach ($Pkg in $Pkgs.Keys) {
+		foreach ($Ver in $Pkgs.$Pkg) {
+			if ($Packages | Where-Object { ($_ -match '^([^:]+):?(.*)$') -and ($Pkg -eq $Matches[1] -and (-not $Matches[2] -or $Ver -match "^$([regex]::Escape($Matches[2]))(?:[^0-9]|$)")) } ) {
+				$Out.$Pkg = @($Out.$Pkg) + @([SemanticVersion]::new($Ver)) | Sort-Object -Descending
+			}
+		}
+	}
+	return $Out
+}
+
 function Format-PwrPackages([parameter(ValueFromPipeline=$True)]$Packages) {
 	''
 	$Packages | Format-List | Out-String -Stream | Where-Object{ $_.Length -gt 0 } | Sort-Object
@@ -968,7 +983,7 @@ function Invoke-PwrScripts {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.34'
+$env:PwrVersion = '0.4.35'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
@@ -1170,24 +1185,21 @@ switch ($Command) {
 	}
 	{$_ -in 'ls', 'list'} {
 		if ($Installed) {
-			New-Object PSObject -Property (Get-InstalledPwrPackages) | Format-PwrPackages
-			break
-		}
-		foreach ($Repo in $PwrRepositories) {
-			if (($Packages.Count -eq 1) -and ($Packages[0] -match '[^:]+')) {
-				$Pkg = $Matches[0]
-				Write-PwrOutput "$Pkg[$($Repo.Uri)]"
-				if ($Repo.Packages.$Pkg -and -not $Quiet -and -not $Silent) {
-					$Repo.Packages.$Pkg | Format-List
-				} else {
-					Write-PwrHost '<none>'
-				}
+			Write-PwrOutput "[$PwrPath]"
+			$Show = Get-InstalledPwrPackages | Select-PwrPackages
+			if ($Show.Count -eq 0) {
+				Write-PwrHost '<none>'
 			} else {
+				New-Object PSObject -Property $Show | Format-PwrPackages
+			}
+		} else {
+			foreach ($Repo in $PwrRepositories) {
 				Write-PwrOutput "[$($Repo.Uri)]"
-				if ('' -ne $Repo.Packages -and -not $Quiet -and -not $Silent) {
-					$Repo.Packages | Format-PwrPackages
-				} else {
+				$Show = $Repo.Packages | ConvertTo-HashTable | Select-PwrPackages
+				if ($Show.Count -eq 0) {
 					Write-PwrHost '<none>'
+				} else {
+					New-Object PSObject -Property $Show | Format-PwrPackages
 				}
 			}
 		}
