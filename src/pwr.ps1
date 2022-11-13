@@ -58,6 +58,10 @@
 	Overrides 'pwr.json' package versions with the versions provided by the `Packages` parameter
 	The package must be declared in the configuration file
 	The package must not be expressed by a file URI
+.PARAMETER AutoPruneDays
+	Use with the `prune` command to configure the number of days to keep orphaned packages before being auto-pruned
+	When this parameter is used, the new value will be saved and no pruning will occur
+	Auto-pruning occurs when `fetch`, `load`, or `shell` commands are run
 .PARAMETER Installed
 	Use with the `list` command to enumerate the packages installed on the local machine
 .PARAMETER WhatIf
@@ -87,6 +91,8 @@ param (
 	[string]$AssertMinimum,
 	[ValidatePattern('^[1-9][0-9]*$')]
 	[int]$DaysOld,
+	[AllowNull()]
+	[System.Nullable[int]]$AutoPruneDays,
 	[switch]$Offline,
 	[switch]$Info,
 	[switch]$Quiet,
@@ -135,6 +141,9 @@ function Assert-PwrArguments {
 	}
 	if ($Installed -and $Command -notin 'ls', 'list') {
 		Write-PwrFatal "only command 'list' is compatible with switch -Installed: $Command"
+	}
+	if ($script:PSBoundParameters.ContainsKey('AutoPruneDays') -and $Command -notin ,'prune') {
+		Write-PwrFatal "only command 'prune' is compatible with switch -AutoPruneDays: $Command"
 	}
 	if ($AssertMinimum -and $Command -notin 'v', 'version') {
 		Write-PwrFatal "only command 'version' is compatible with flag -AssertMinimum: $Command"
@@ -1000,6 +1009,7 @@ function Get-PwrLoadCache {
 				$SplitAt = $ObsoletePkg.LastIndexOf(":")
 				$LoadCache.ObsoletePkgs[$ObsoletePkg.Substring(0, $SplitAt)] = $ObsoletePkg.Substring($SplitAt + 1)
 			}
+			$LoadCache.AutoPruneDays = $JsonObj.AutoPruneDays
 		} catch {
 			Write-PwrFatal "bad JSON parse of file $LoadCacheFile - $_"
 		}
@@ -1028,7 +1038,14 @@ function Set-PwrLoadCache($LoadCache, $Id, $PkgTag) {
 
 function Save-PwrLoadCache {
 	[CmdletBinding(SupportsShouldProcess)]
-	param($LoadCache)
+	param (
+		$LoadCache,
+		$AutoPrune = $true
+	)
+	if ($AutoPrune -and $LoadCache.AutoPruneDays -ne $null) {
+		Write-PwrDebug 'auto-pruning'
+		PrunePwrPackages $LoadCache $LoadCache.AutoPruneDays
+	}
 	$LoadCacheFile = "$PwrPath\cache\load"
 	if ($PSCmdlet.ShouldProcess($LoadCacheFile, 'Save Load Cache')) {
 		Write-PwrDebug 'saving load cache'
@@ -1038,13 +1055,12 @@ function Save-PwrLoadCache {
 			ObsoletePkgs = @()
 		}
 		$LoadCache.LoadMap.GetEnumerator() | ForEach-Object {
-			if (-not $_.Key.StartsWith('file:///')) {
-				$JsonObj.Loads += "$($_.Key):$($_.Value)"
-			}
+			$JsonObj.Loads += "$($_.Key):$($_.Value)"
 		}
 		$LoadCache.ObsoletePkgs.GetEnumerator() | ForEach-Object {
 			$JsonObj.ObsoletePkgs += "$($_.Key):$($_.Value)"
 		}
+		$JsonObj.AutoPruneDays = $LoadCache.AutoPruneDays
 		[IO.File]::WriteAllText($LoadCacheFile, ($JsonObj | ConvertTo-Json -Compress))
 	}
 }
@@ -1078,7 +1094,7 @@ function PrunePwrPackages {
 				try {
 					$Item = Get-ChildItem -Path "$PkgRoot\.pwr" -ErrorAction Stop
 					if ($Item.LastAccessTime -lt ((Get-Date) - (New-TimeSpan -Days 180))) {
-						$StalePkgs += "${Name}:$Ver"
+						$StalePkgs += "${Name}:$Ver (last used $($Item.LastAccessTime.ToString('d')))"
 					}
 				} catch {
 					Write-PwrWarning "$PkgRoot is not a pwr package; it should be removed manually"
@@ -1087,7 +1103,7 @@ function PrunePwrPackages {
 		}
 	}
 	if ($StalePkgs.Count -gt 0) {
-		Write-PwrOutput "consider removing stale pwr packages: $($StalePkgs -join ', ')"
+		Write-PwrOutput "consider removing stale pwr packages:$((,'' + $StalePkgs) -join "`n`t")"
 	}
 	# Clean up load cache (non-existant packages will be removed from the maps)
 	$OldLoadMap = $LoadCache.LoadMap
@@ -1344,8 +1360,17 @@ switch ($Command) {
 		Lock-PwrLock
 		try {
 			$LoadCache = Get-PwrLoadCache
-			PrunePwrPackages $LoadCache
-			Save-PwrLoadCache $LoadCache
+			if ($PSBoundParameters.ContainsKey('AutoPruneDays')) {
+				if ($AutoPruneDays -eq $null) {
+					Write-PwrOutput 'disabling auto-pruning'
+				} else {
+					Write-PwrOutput "setting auto-prune days to $AutoPruneDays"
+				}
+				$LoadCache.AutoPruneDays = $AutoPruneDays
+			} else {
+				PrunePwrPackages $LoadCache
+			}
+			Save-PwrLoadCache $LoadCache $false
 		} finally {
 			Unlock-PwrLock
 		}

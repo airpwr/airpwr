@@ -85,7 +85,7 @@ An `auths.json` might look like:
 # Usage
 
 	SYNTAX
-		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
+		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-AutoPruneDays <Int32>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
 
 	PARAMETERS
 		-Command <String>
@@ -151,6 +151,11 @@ An `auths.json` might look like:
 			The package must be declared in the configuration file
 			The package must not be expressed by a file URI
 
+		-AutoPruneDays <Int32>
+			Use with the `prune` command to configure the number of days to keep orphaned packages before being auto-pruned
+			When this parameter is used, the new value will be saved and no pruning will occur
+			Auto-pruning occurs when `fetch`, `load`, or `shell` commands are run
+
 		-Installed [<SwitchParameter>]
 			Use with the `list` command to enumerate the packages installed on the local machine
 
@@ -176,6 +181,11 @@ Configuring a development shell
 Listing available packages
 
 	pwr list
+
+Configure auto-pruning of out-of-date packages
+
+	pwr prune -AutoPruneDays 7 # Only packages at least 7 days out-of-date will be auto-pruned
+	pwr prune -AutoPruneDays $null # Disable auto-pruning
 
 ### Example Scripts
 

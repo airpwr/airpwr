@@ -392,6 +392,50 @@ function Test-Pwr-PruneVersion {
 	}
 }
 
+function Test-Pwr-AutoPrune {
+	Invoke-PwrWithTempHome {
+		$Repo = 'https://fake.repo/v2/pwr'
+		$Packages = @(
+			@{Name = 'pkg-1'; Version = '0.9.0'; Pwr = '{}'},
+			@{Name = 'pkg-1'; Version = '1.0.0'; Pwr = '{}'}
+		)
+		Invoke-PwrSetPackages $Repo $Packages
+
+		# Baseline: auto-pruning disabled
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		pwr -Offline -Repositories $Repo load pkg-1
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('0.9.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+
+		# Auto-prune after 1 day: all versions installed
+		pwr -Offline -Repositories $Repo prune -AutoPruneDays 1
+		pwr -Offline -Repositories $Repo load pkg-1
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('0.9.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+
+		# Auto-prune after 0 days (immediate): remove all versions except latest
+		pwr -Offline -Repositories $Repo prune -AutoPruneDays 0
+		pwr -Offline -Repositories $Repo load pkg-1
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { -not $ListInstalled.Contains('0.9.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+
+		# Reinitialize baseline: all versions installed
+		Invoke-PwrSetPackages $Repo $Packages
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('0.9.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+
+		# Auto-pruning disabled: all versions installed
+		pwr -Offline -Repositories $Repo prune -AutoPruneDays $null
+		pwr -Offline -Repositories $Repo load pkg-1
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('0.9.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+	}
+}
+
 ###### Test Runner ######
 
 if ($MyInvocation.InvocationName -eq '.' -or $MyInvocation.Line -eq '') {
