@@ -1060,7 +1060,6 @@ function Prune-PwrPackages($LoadCache, $ObsoleteDays) {
 				if (-not $ObsoleteDate) {
 					$ObsoleteDate = Get-Date -Format FileDateTimeUniversal
 					$LoadCache.ObsoletePkgs[$Tag] = $ObsoleteDate
-					Write-PwrOutput "package ${Name}:$Ver is eligible for pruning"
 				}
 				if ((-not $ObsoleteDays -or [DateTime]::ParseExact($ObsoleteDate, 'yyyyMMddTHHmmssffffZ', $null) -lt ((Get-Date) - (New-TimeSpan -Days $ObsoleteDays))) -and $PSCmdlet.ShouldProcess($Tag, 'Prune pwr Tag')) {
 					Write-PwrOutput "pruning ${Name}:$Ver ... " -NoNewline
@@ -1103,7 +1102,7 @@ function Prune-PwrPackages($LoadCache, $ObsoleteDays) {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.4.35'
+$env:PwrVersion = '0.5.0'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
