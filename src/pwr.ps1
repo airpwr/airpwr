@@ -750,7 +750,7 @@ function Remove-Directory($Dir) {
 
 function Get-InstalledPwrPackages {
 	$Pkgs = @{}
-	Get-ChildItem -Path $PwrPkgPath | ForEach-Object {
+	Get-ChildItem -Path $PwrPkgPath -ErrorAction SilentlyContinue | ForEach-Object {
 		if ($_.Name -match '(.+)-([0-9].+)') {
 			$Pkg = $Matches[1]
 			$Ver = $Matches[2]
