@@ -1015,7 +1015,9 @@ function Get-PwrLoadCache {
 function Set-PwrLoadCache($LoadCache, $Id, $PkgTag) {
 	$OldTag = $LoadCache.LoadMap[$Id]
 	$LoadCache.LoadMap[$Id] = $PkgTag
-	$LoadCache.ObsoletePkgs.Remove($PkgTag)
+	if ($PkgTag) {
+		$LoadCache.ObsoletePkgs.Remove($PkgTag)
+	}
 	if ($OldTag -and -not $LoadCache.LoadMap.ContainsValue($OldTag)) {
 		$LoadCache.ObsoletePkgs[$OldTag] = Get-Date -Format FileDateTimeUniversal
 		$EndOfName = $OldTag.LastIndexOf("-")
