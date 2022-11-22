@@ -1013,6 +1013,9 @@ function Get-PwrLoadCache {
 }
 
 function Set-PwrLoadCache($LoadCache, $Id, $PkgTag) {
+	if ($Id.StartsWith('file:///')) {
+		return
+	}
 	$OldTag = $LoadCache.LoadMap[$Id]
 	$LoadCache.LoadMap[$Id] = $PkgTag
 	$LoadCache.ObsoletePkgs.Remove($PkgTag)
@@ -1023,7 +1026,9 @@ function Set-PwrLoadCache($LoadCache, $Id, $PkgTag) {
 	}
 }
 
-function Save-PwrLoadCache($LoadCache) {
+function Save-PwrLoadCache {
+	[CmdletBinding(SupportsShouldProcess)]
+	param($LoadCache)
 	$LoadCacheFile = "$PwrPath\cache\load"
 	if ($PSCmdlet.ShouldProcess($LoadCacheFile, 'Save Load Cache')) {
 		Write-PwrDebug 'saving load cache'
@@ -1044,7 +1049,9 @@ function Save-PwrLoadCache($LoadCache) {
 	}
 }
 
-function Prune-PwrPackages($LoadCache, $ObsoleteDays) {
+function PrunePwrPackages {
+	[CmdletBinding(SupportsShouldProcess)]
+	param($LoadCache, $ObsoleteDays)
 	$TagsToKeep = $LoadCache.LoadMap.Values
 	$ProcessedTags = @()
 	$Pkgs = Get-InstalledPwrPackages
@@ -1102,7 +1109,7 @@ function Prune-PwrPackages($LoadCache, $ObsoleteDays) {
 $ProgressPreference = 'SilentlyContinue'
 $PwrPath = if ($env:PwrHome) { $env:PwrHome } else { "$env:AppData\pwr" }
 $PwrPkgPath = "$PwrPath\pkg"
-$env:PwrVersion = '0.5.0'
+$env:PwrVersion = '0.5.1'
 Write-PwrInfo "running version $env:PwrVersion with powershell $($PSVersionTable.PSVersion)"
 
 if ($null -eq $Run) {
@@ -1284,6 +1291,7 @@ switch ($Command) {
 		try {
 			Enter-Shell
 		} catch {
+			Write-PwrThrow $_
 			exit 1
 		}
 	}
@@ -1336,7 +1344,7 @@ switch ($Command) {
 		Lock-PwrLock
 		try {
 			$LoadCache = Get-PwrLoadCache
-			Prune-PwrPackages $LoadCache
+			PrunePwrPackages $LoadCache
 			Save-PwrLoadCache $LoadCache
 		} finally {
 			Unlock-PwrLock
