@@ -13,5 +13,8 @@
 			"packages": ["pwr"],
 			"command": "pwr version | Out-Null"
 		}
-	}
+	},
+	"init": [
+		"Set-Alias curl.exe example1.ps1 -Scope Global"
+	]
 }

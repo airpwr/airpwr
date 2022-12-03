@@ -242,6 +242,13 @@ function Test-Pwr-ShellEnvOther {
 	}
 }
 
+function Test-Pwr-ShellInit {
+	pwr sh
+	Invoke-PwrAssertTrue {
+		(curl.exe) -eq 'buzzbazz1'
+	}
+}
+
 function Test-Pwr-ShellGetPkg {
 	pwr sh pwr; pwr exit
 	Invoke-PwrAssertTrue {
@@ -403,6 +410,7 @@ $ExitCode = 0
 function Invoke-PwrTest($fn) {
 	&$script:PowerShell -NoProfile -Command {
 		param($script, $fn)
+		Set-Location $(Split-Path -Parent $script)
 		$env:Path = "$(Split-Path -Parent $script)\..\src;$env:Path"
 		. $script
 

@@ -45,6 +45,8 @@
 	Otherwise, the cached repository is used and updated if older than one day
 .PARAMETER Offline
 	Prevents attempts to request a web resource
+.PARAMETER NoInit
+	Do not run initialization scripts from the configuration file
 .PARAMETER Info
 	Displays messages written to the information stream (6), otherwise the InformationPreference value is respected
 .PARAMETER Quiet
@@ -88,6 +90,7 @@ param (
 	[ValidatePattern('^[1-9][0-9]*$')]
 	[int]$DaysOld,
 	[switch]$Offline,
+	[switch]$NoInit,
 	[switch]$Info,
 	[switch]$Quiet,
 	[switch]$Silent,
@@ -851,6 +854,11 @@ function Enter-Shell {
 				throw $_
 			}
 			Write-PwrOutput "using $($P.Ref)"
+		}
+		if (-not $NoInit) {
+			foreach ($E in $PwrConfig.Init) {
+				Invoke-Expression $E
+			}
 		}
 	} finally {
 		Unlock-PwrLock

@@ -85,7 +85,7 @@ An `auths.json` might look like:
 # Usage
 
 	SYNTAX
-		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
+		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-Offline] [-NoInit] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
 
 	PARAMETERS
 		-Command <String>
@@ -132,6 +132,9 @@ An `auths.json` might look like:
 
 		-Offline [<SwitchParameter>]
 			Prevents attempts to request a web resource
+
+		-NoInit [<SwitchParameter>]
+			Do not run initialization scripts from the configuration file
 
 		-Info [<SwitchParameter>]
 			Displays messages written to the information stream (6), otherwise the InformationPreference value is respected
