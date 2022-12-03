@@ -2,7 +2,7 @@ param (
 	[string]$TestName
 )
 
-$env:Path = "$PSScriptRoot\..\src;$env:Path"
+$PowerShell = (Get-Process -Id $PID).Path
 
 ###### Assertions ######
 function Invoke-PwrAssertTrue($block) {
@@ -31,7 +31,45 @@ function Invoke-PwrAssertNoThrows($block) {
 		Invoke-Command -ScriptBlock $block | Out-Null
 	} catch {
 		Write-Error "Assertion Threw: $_"
+		throw
 	}
+}
+
+###### Test Helpers ######
+
+function Invoke-PwrWithTempHome($block) {
+	$private:TempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid())
+	New-Item -ItemType Directory -Path $TempDirectory
+	$private:PreviousPwrHome = $env:PwrHome
+	try {
+		$env:PwrHome = $TempDirectory
+		&$block
+	} finally {
+		$env:PwrHome = $PreviousPwrHome
+		Remove-Item -Recurse -Force -Path $TempDirectory | Out-Null
+	}
+}
+
+function Invoke-PwrSetPackages {
+	param(
+		[string]$Repo,
+		$Packages
+	)
+	$private:Hash = &$script:PowerShell -Command {
+		param($Repo)
+		. pwr v -Quiet
+		Get-StringHash $Repo
+	} -args $Repo
+	$private:Cache = @{}
+	foreach ($P in $Packages) {
+		if ($P.Pwr) {
+			New-Item -Force -ItemType Directory -Path "$env:PwrHome\pkg\$($P.Name)-$($P.Version)"
+			Set-Content "$env:PwrHome\pkg\$($P.Name)-$($P.Version)\.pwr" $P.Pwr
+		}
+		$Cache.($P.Name) = @($Cache.($P.Name)) + $P.Version | Sort-Object -Descending
+	}
+	New-Item -Force -ItemType Directory -Path "$env:PwrHome\cache"
+	[IO.File]::WriteAllText("$env:PwrHome\cache\$Hash", ($Cache | ConvertTo-Json -Compress))
 }
 
 ###### Tests ######
@@ -69,15 +107,18 @@ function Test-Pwr-BuildVersions {
 }
 
 function Test-Pwr-AssertMinVersion {
-	. pwr v -Quiet
+	$Version = &$script:PowerShell -Command {
+		. pwr v -Quiet
+		$env:PwrVersion
+	}
 	Invoke-PwrAssertNoThrows {
-		pwr v -AssertMinimum "$env:PwrVersion"
+		pwr v -AssertMinimum "$Version"
 	}
 	Invoke-PwrAssertThrows {
-		pwr v -AssertMinimum "9$env:PwrVersion"
+		pwr v -AssertMinimum "9$Version"
 	}
 	Invoke-PwrAssertThrows {
-		pwr v -AssertMinimum "${env:PwrVersion}9"
+		pwr v -AssertMinimum "${Version}9"
 	}
 	Invoke-PwrAssertNoThrows {
 		pwr v -AssertMinimum '0.0.0'
@@ -250,17 +291,135 @@ function Test-Pwr-RunPwr {
 	}
 }
 
+function Test-Pwr-List {
+	Invoke-PwrWithTempHome {
+		$Repo = 'https://fake.repo/v2/pwr'
+		$Packages = @(
+			@{Name = 'pkg-1'; Version = '1.0.0'},
+			@{Name = 'pkg-1'; Version = '1.1.0'; Pwr = '{}'},
+			@{Name = 'pkg-2'; Version = '1.2.0'},
+			@{Name = 'pkg-3'; Version = '1.3.0'; Pwr = '{}'}
+		)
+		Invoke-PwrSetPackages $Repo $Packages
+
+		# List: all packages listed
+		$ListInstalled = pwr -Offline -Repositories $Repo list | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.1.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.2.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.3.0') }
+
+		# List installed: pkg-1:1.1.0, pkg-3:1.3.0 listed
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { -not $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.1.0') }
+		Invoke-PwrAssertTrue { -not $ListInstalled.Contains('1.2.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.3.0') }
+	}
+}
+
+function Test-Pwr-Remove {
+	Invoke-PwrWithTempHome {
+		$Repo = 'https://fake.repo/v2/pwr'
+		$Packages = @(
+			@{Name = 'pkg-1'; Version = '1.0.0'; Pwr = '{}'},
+			@{Name = 'pkg-1'; Version = '1.1.0'; Pwr = '{}'}
+		)
+		Invoke-PwrSetPackages $Repo $Packages
+
+		# Baseline: all versions installed
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.1.0') }
+
+		# Remove pkg-1:1.1.0
+		pwr -Offline -Repositories $Repo rm pkg-1:1.1.0
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { -not $ListInstalled.Contains('1.1.0') }
+	}
+}
+
+function Test-Pwr-PruneLatest {
+	Invoke-PwrWithTempHome {
+		$Repo = 'https://fake.repo/v2/pwr'
+		$Packages = @(
+			@{Name = 'pkg-1'; Version = '1.0.0'; Pwr = '{}'},
+			@{Name = 'pkg-1'; Version = '1.1.0'; Pwr = '{}'}
+		)
+		Invoke-PwrSetPackages $Repo $Packages
+
+		# Baseline: all versions installed
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.1.0') }
+
+		# Prune: remove all versions except latest
+		pwr -Offline -Repositories $Repo load pkg-1
+		pwr -Offline -Repositories $Repo prune
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { -not $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.1.0') }
+	}
+}
+
+function Test-Pwr-PruneVersion {
+	Invoke-PwrWithTempHome {
+		$Repo = 'https://fake.repo/v2/pwr'
+		$Packages = @(
+			@{Name = 'pkg-1'; Version = '0.9.0'; Pwr = '{}'},
+			@{Name = 'pkg-1'; Version = '1.0.0'; Pwr = '{}'},
+			@{Name = 'pkg-1'; Version = '1.1.0'; Pwr = '{}'},
+			@{Name = 'pkg-1'; Version = '1.2.0'; Pwr = '{}'}
+		)
+		Invoke-PwrSetPackages $Repo $Packages
+
+		# Baseline: all versions installed
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('0.9.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.1.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.2.0') }
+
+		# Prune: remove all versions except latest, 1.0
+		pwr -Offline -Repositories $Repo load pkg-1:1.0
+		pwr -Offline -Repositories $Repo prune
+		$ListInstalled = pwr -Offline -Repositories $Repo list -Installed | Out-String
+		Invoke-PwrAssertTrue { -not $ListInstalled.Contains('0.9.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.0.0') }
+		Invoke-PwrAssertTrue { -not $ListInstalled.Contains('1.1.0') }
+		Invoke-PwrAssertTrue { $ListInstalled.Contains('1.2.0') }
+	}
+}
+
 ###### Test Runner ######
 
+if ($MyInvocation.InvocationName -eq '.' -or $MyInvocation.Line -eq '') {
+	exit # Exit if the script was dot-sourced
+}
+
+$ExitCode = 0
+
 function Invoke-PwrTest($fn) {
-	try {
-		Invoke-Expression $fn | Out-Null
-		Write-Host -ForegroundColor Green "[PASSED] $fn"
-	} catch {
-		$env:PwrTestFail = $true
-		Write-Host -ForegroundColor Red "[FAILED] $fn`r`n`t> $_`r`n`t$($_.ScriptStackTrace.Split("`n")  -join "`r`n`t")"
-	} finally {
-		pwr exit -Silent
+	&$script:PowerShell -Command {
+		param($script, $fn)
+		$env:Path = "$(Split-Path -Parent $script)\..\src;$env:Path"
+		. $script
+
+		function Invoke-Test($private:TestName) {
+			try {
+				Invoke-Expression $TestName | Out-Null
+				Write-Host -ForegroundColor Green "[PASSED] $TestName"
+			} catch {
+				Write-Host -ForegroundColor Red "[FAILED] $TestName`r`n`t> $_`r`n`t$($_.ScriptStackTrace.Split("`n")  -join "`r`n`t")"
+				exit 1
+			}
+		}
+
+		Invoke-Test($fn)
+	} -args $PSCommandPath, $fn
+	if ($LASTEXITCODE -ne 0) {
+		$script:ExitCode++
 	}
 }
 
@@ -275,10 +434,9 @@ switch ($TestName) {
 	}
 }
 
-if ($env:PwrTestFail) {
-	$env:PwrTestFail = $null
+if ($ExitCode -gt 0) {
 	Write-Host -ForegroundColor Red "Test failure"
-	exit 1
+	exit $ExitCode
 } else {
 	exit 0
 }
