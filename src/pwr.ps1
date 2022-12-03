@@ -63,7 +63,7 @@
 .PARAMETER WhatIf
 	Use with the `remove` or `prune` commands to show the dry-run of packages that will be removed
 .PARAMETER Run
-	Executes the user-defined script inside a shell session
+	Executes a script block or user-defined script inside a shell session and then terminates the session
 	The script is declared like `{ ..., "scripts": { "name": "something to run" } }` in 'pwr.json'
 	To specify a script with parameters, declare it like `{ ..., "scripts": { "name": { "format": "something to run --arg={1}" } } }` in 'pwr.json'
 	Arguments may be provided to the formatted script, referenced in the format as {1}, {2}, etc. ({0} refers to the script name)
@@ -92,7 +92,8 @@ param (
 	[switch]$Quiet,
 	[switch]$Silent,
 	[switch]$Override,
-	[string[]]$Run
+	[Alias('c')]
+	[object[]]$Run
 )
 
 $WriteToHost = ($MyInvocation.ScriptLineNumber -eq 1) -and ($MyInvocation.OffsetInLine -eq 1) -and ($MyInvocation.PipelineLength -eq 1)
@@ -125,7 +126,7 @@ function Write-PwrFatal($Message) {
 function Assert-PwrArguments {
 	if ($null -ne $Run) {
 		if ($Command -notin '', 'shell', 'sh') {
-			Write-PwrFatal "only commands 'shell', and '' are compatible with -Run: $Command"
+			Write-PwrFatal "only commands 'shell', 'sh', and '' are compatible with -Run: $Command"
 		} elseif ($Run.Count -eq 0) {
 			Write-PwrFatal 'no run arguments provided'
 		}
@@ -862,12 +863,12 @@ function Enter-Shell {
 	$env:Path = "$(if ($env:Path.Length -gt 0) { "$env:Path;" })$env:SYSTEMROOT;$env:SYSTEMROOT\System32;$env:SYSTEMROOT\System32\WindowsPowerShell\v1.0"
 }
 
-function Exit-Shell {
+function Exit-Shell([bool]$IgnoreErrors = $true) {
 	if ($env:PwrShellPackages) {
 		Restore-PSSessionState
 		$env:PwrShellPackages = $null
 		Write-PwrDebug 'shell session closed'
-	} else {
+	} elseif (-not $IgnoreErrors) {
 		Write-PwrFatal 'no shell session is in progress'
 	}
 }
@@ -946,9 +947,7 @@ function Invoke-PwrScriptCommand($Script) {
 	} catch {
 		$ErrorMessage = $_.ToString().Trim()
 	} finally {
-		if ($env:PwrShellPackages) {
-			Exit-Shell
-		}
+		Exit-Shell
 	}
 	if ($ErrorMessage) {
 		Write-PwrFatal "script '$Name' failed to execute command '$RunCmd'`n     $(foreach ($Line in $ErrorMessage.Split("`r`n")) { '>> ' + $Line })"
@@ -1174,7 +1173,7 @@ if ($null -eq $Run) {
 			exit
 		}
 		'exit' {
-			Exit-Shell
+			Exit-Shell -IgnoreErrors $false
 			exit
 		}
 	}
@@ -1219,7 +1218,17 @@ Get-PwrPackages
 Resolve-PwrPackageOverrides
 
 if ($null -ne $Run) {
-	Invoke-PwrScripts
+	if ($Run.Count -eq 1 -and $Run[0] -is [ScriptBlock]) {
+		Enter-Shell
+		try {
+			&$Run[0]
+		} finally {
+			Exit-Shell
+		}
+	} else {
+		$Run = $Run | ForEach { $_.ToString() } # Convert to string[]
+		Invoke-PwrScripts
+	}
 	exit
 }
 

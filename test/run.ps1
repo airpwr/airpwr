@@ -392,6 +392,24 @@ function Test-Pwr-PruneVersion {
 	}
 }
 
+function Test-Pwr-RunScriptBlock {
+	pwr sh "file:///$PSScriptRoot\pkg1" -Run {
+		Invoke-PwrAssertTrue {
+			$env:any -eq 'thing'
+		}
+	}
+
+	# Throwing an exception still exits the shell
+	$env:any = 'thing'
+	Invoke-PwrAssertThrows {
+		pwr sh "file:///$PSScriptRoot\pkg3" -c {
+			Invoke-PwrAssertTrue { $env:any -eq 'buzzy' }
+			throw
+		}
+	}
+	Invoke-PwrAssertTrue { $env:any -eq 'thing' }
+}
+
 ###### Test Runner ######
 
 if ($MyInvocation.InvocationName -eq '.' -or $MyInvocation.Line -eq '') {
@@ -434,9 +452,7 @@ switch ($TestName) {
 	}
 }
 
-if ($ExitCode -gt 0) {
+if ($ExitCode -ne 0) {
 	Write-Host -ForegroundColor Red "Test failure"
 	exit $ExitCode
-} else {
-	exit 0
 }

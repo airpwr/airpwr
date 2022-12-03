@@ -85,7 +85,7 @@ An `auths.json` might look like:
 # Usage
 
 	SYNTAX
-		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <String>] [-WhatIf]
+		pwr [[-Command] <String>] [[-Packages] <String[]>] [-Repositories <String[]>] [-Fetch] [-Installed] [-AssertMinimum <String>] [-Offline] [-Quiet] [-Silent] [-Override] [-Run <ScriptBlock>|<String[]>] [-WhatIf]
 
 	PARAMETERS
 		-Command <String>
@@ -158,7 +158,7 @@ An `auths.json` might look like:
 			Use with the `remove` command to show the dry-run of packages to remove
 
 		-Run <String>
-			Executes the user-defined script inside a shell session
+			Executes a script block or user-defined script inside a shell session and then terminates the session
 			The script is declared like `{ ..., "scripts": { "name": "something to run" } }` in 'pwr.json'
 			To specify a script with parameters, declare it like `{ ..., "scripts": { "name": { "format": "something to run --arg={1}" } } }` in 'pwr.json'
 			Arguments may be provided to the formatted script, referenced in the format as {1}, {2}, etc. ({0} refers to the script name)
