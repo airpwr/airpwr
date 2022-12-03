@@ -55,7 +55,7 @@ function Invoke-PwrSetPackages {
 		[string]$Repo,
 		$Packages
 	)
-	$private:Hash = &$script:PowerShell -Command {
+	$private:Hash = &$script:PowerShell -NoProfile -Command {
 		param($Repo)
 		. pwr v -Quiet
 		Get-StringHash $Repo
@@ -107,7 +107,7 @@ function Test-Pwr-BuildVersions {
 }
 
 function Test-Pwr-AssertMinVersion {
-	$Version = &$script:PowerShell -Command {
+	$Version = &$script:PowerShell -NoProfile -Command {
 		. pwr v -Quiet
 		$env:PwrVersion
 	}
@@ -401,7 +401,7 @@ if ($MyInvocation.InvocationName -eq '.' -or $MyInvocation.Line -eq '') {
 $ExitCode = 0
 
 function Invoke-PwrTest($fn) {
-	&$script:PowerShell -Command {
+	&$script:PowerShell -NoProfile -Command {
 		param($script, $fn)
 		$env:Path = "$(Split-Path -Parent $script)\..\src;$env:Path"
 		. $script
