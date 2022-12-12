@@ -306,6 +306,22 @@ function Write-PwrWarning($Message) {
 	}
 }
 
+class PwrWebRequestResult {
+
+	[string]$Output
+	[bool]$IsPartial
+
+	PwrWebRequestResult([string]$Output, [bool]$IsPartial) {
+		$this.Output = $Output
+		$this.IsPartial = $IsPartial
+	}
+
+	[string]ToString() {
+		return $this.Output
+	}
+
+}
+
 function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing) {
 	if ($Offline) {
 		Write-PwrThrow 'cannot web request while running offline'
@@ -315,13 +331,16 @@ function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing
 		$Expr += " --header '${K}: $($Headers.$K)'"
 	}
 	if ($OutFile) {
-		$Expr += " --output '$OutFile'"
+		$Expr += " --output '$OutFile' -C -"
+		$InitialSize = (Get-Item -ErrorAction SilentlyContinue $OutFile).Length
 	}
 	$Content = Invoke-Expression $Expr
-	if ($global:LASTEXITCODE) {
-		Write-PwrFatal "command 'curl.exe' finished with non-zero exit value $global:LASTEXITCODE"
+	if ($global:LASTEXITCODE -eq 0) {
+		return [PwrWebRequestResult]::new($Content, $false)
+	} elseif ($OutFile -and $InitialSize -lt (Get-Item -ErrorAction SilentlyContinue $OutFile).Length) { # This is a partial download if the file size increased
+		return [PwrWebRequestResult]::new($Content, $true)
 	}
-	return $Content
+	Write-PwrFatal "command 'curl.exe' finished with non-zero exit value $global:LASTEXITCODE"
 }
 
 function Get-StringHash($S) {
@@ -366,17 +385,19 @@ function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 	$Tmp = "$env:Temp/$($Digest.Replace(':', '_')).tgz"
 	if (-not ((Test-Path -Path $Tmp -PathType Leaf) -and (Get-FileHash -Path $Tmp -Algorithm SHA256).Hash -eq $Digest.Replace('sha256:', ''))) {
 		$Headers = @{}
-		if ($Repo.Headers.Authorization) {
-			$Headers.Authorization = $Repo.Headers.Authorization
-		} elseif ($Repo.IsDocker) {
-			$Headers.Authorization = "Bearer $(Get-DockerToken $Repo)"
-		}
-		Invoke-PwrWebRequest "$($Repo.Uri)/blobs/$Digest" -OutFile $Tmp -Headers $Headers
+		do {
+			if ($Repo.Headers.Authorization) {
+				$Headers.Authorization = $Repo.Headers.Authorization
+			} elseif ($Repo.IsDocker) {
+				$Headers.Authorization = "Bearer $(Get-DockerToken $Repo)"
+			}
+		} while ((Invoke-PwrWebRequest "$($Repo.Uri)/blobs/$Digest" -OutFile $Tmp -Headers $Headers).IsPartial)
 	} else {
 		Write-PwrInfo "using cache for $Ref"
 	}
 	$Hash = "sha256:$((Get-FileHash -Path $Tmp -Algorithm SHA256).Hash)"
 	if (-not (Test-Path -Path $Tmp -PathType Leaf) -or $Hash -ne $Digest) {
+		Remove-Item $Tmp
 		Write-PwrFatal "the download of layer$(if ($Hash.Length -gt 7) { " with digest $Hash" }) for package $Ref was corrupted and does not match expected digest $Digest"
 	}
 	return Start-Job -ScriptBlock {
