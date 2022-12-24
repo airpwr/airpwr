@@ -6,7 +6,7 @@ A package manager and environment to provide consistent tooling for software tea
 
 # Requirements
 
-`pwr` requires the use of `$env:SystemDrive\Windows\System32\curl.exe` and `$env:SystemDrive\Windows\System32\tar.exe`, which are only available on Windows builds greater than `17063`.
+`pwr` requires the use of `$env:SystemDrive\Windows\System32\tar.exe`, which is only available on Windows builds greater than `17063`.
 
 Use the following command in a `powershell` terminal to determine your build version.
 
@@ -24,7 +24,7 @@ Use the following command in a `powershell` terminal to determine your PowerShel
 
 Open a `powershell` terminal and execute the following command:
 
-	iex (& "$env:SYSTEMROOT\System32\curl.exe" -s --url 'https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1' | Out-String)
+	iex ([System.Net.WebClient]::new().DownloadString('https://raw.githubusercontent.com/airpwr/airpwr/main/src/install.ps1'))
 
 The installer downloads the `pwr` cmdlet and puts its location on the user path.
 

@@ -1,18 +1,19 @@
 $ProgressPreference = 'SilentlyContinue'
 
-# Required for curl.exe
-if ([Environment]::OSVersion.Version.Build -lt 17063) {
-	Write-Error "windows build version $([Environment]::OSVersion.Version.Build) does not meet minimum required build version 17063; update windows to use pwr"
-} elseif ($env:PwrLoadedPackages -or $env:PwrShellPackages) {
+if ($env:PwrLoadedPackages -or $env:PwrShellPackages) {
 	Write-Error "already running pwr with packages $(if ($env:PwrLoadedPackages) { $env:PwrLoadedPackages } else { $env:PwrShellPackages })"
 }
 
 $script:PwrVersion = $env:PwrVersion
 if (-not $script:PwrVersion) {
-	$Tags = & "$env:SYSTEMROOT\System32\curl.exe" -s --url 'https://api.github.com/repos/airpwr/airpwr/tags' | ConvertFrom-Json
-	if ($global:LASTEXITCODE) {
+	$C = [System.Net.WebClient]::new()
+	try {
+		$Tags = $C.DownloadString('https://api.github.com/repos/airpwr/airpwr/tags') | ConvertFrom-Json
+	} catch {
 		Write-Error 'could not get pwr tags'
-		throw
+		throw $_
+	} finally {
+		$C.Dispose()
 	}
 	$script:PwrVersion = $Tags[0].Name.Substring(1)
 }
@@ -24,10 +25,14 @@ mkdir $PwrCmd -Force | Out-Null
 if ($script:PwrVersion -notmatch '^[0-9]+\.[0-9]+(\.[0-9]+)?$') {
 	Write-Error 'version does not match the expected pattern'
 }
-& "$env:SYSTEMROOT\System32\curl.exe" -s --url "https://raw.githubusercontent.com/airpwr/airpwr/v$script:PwrVersion/src/pwr.ps1" --output $PwrScriptPath
-if ($global:LASTEXITCODE) {
+$C = [System.Net.WebClient]::new()
+try {
+	$C.DownloadFile("https://raw.githubusercontent.com/airpwr/airpwr/v$script:PwrVersion/src/pwr.ps1", $PwrScriptPath)
+} catch {
 	Write-Error 'could not to download pwr script'
-	throw
+	throw $_
+} finally {
+	$C.Dispose()
 }
 $UserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (-not $UserPath.Contains($PwrCmd)) {

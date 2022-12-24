@@ -207,7 +207,7 @@ function global:Prompt {
 	}
 }
 
-# Required for tar.exe and curl.exe
+# Required for tar.exe
 if ([Environment]::OSVersion.Version.Build -lt 17063) {
 	Write-PwrFatal "windows build version $([Environment]::OSVersion.Version.Build) does not meet minimum required build version 17063`n     update windows to use pwr"
 } elseif ($PSVersionTable.PSVersion.Major -lt 5) {
@@ -306,22 +306,24 @@ function Write-PwrWarning($Message) {
 	}
 }
 
-function Invoke-PwrWebRequest($Uri, $Headers, $OutFile, [switch]$UseBasicParsing) {
+function Invoke-PwrWebRequest([string]$Uri, $Headers, [string]$OutFile) {
 	if ($Offline) {
 		Write-PwrThrow 'cannot web request while running offline'
 	}
-	$Expr = "$env:SYSTEMROOT\System32\curl.exe -s -L --url '$Uri'"
-	foreach ($K in $Headers.Keys) {
-		$Expr += " --header '${K}: $($Headers.$K)'"
+	$C = [System.Net.WebClient]::new()
+	try {
+		foreach ($K in $Headers.Keys) {
+			$C.Headers.Add($K, $Headers.$K)
+		}
+		$C.Headers.Add("User-Agent", "Mozilla/5.0")
+		if ([string]::IsNullOrEmpty($OutFile)) {
+			return $C.DownloadString($Uri)
+		} else {
+			$C.DownloadFile($Uri, $OutFile)
+		}
+	} finally {
+		$C.Dispose()
 	}
-	if ($OutFile) {
-		$Expr += " --output '$OutFile'"
-	}
-	$Content = Invoke-Expression $Expr
-	if ($global:LASTEXITCODE) {
-		Write-PwrFatal "command 'curl.exe' finished with non-zero exit value $global:LASTEXITCODE"
-	}
-	return $Content
 }
 
 function Get-StringHash($S) {
@@ -347,8 +349,7 @@ function ConvertTo-HashTable {
 }
 
 function Get-DockerToken($Repo) {
-	$Resp = Invoke-PwrWebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($Repo.Scope):pull"
-	return ($Resp | ConvertFrom-Json).Token
+	return (Invoke-PwrWebRequest "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$($Repo.Scope):pull" | ConvertFrom-Json).Token
 }
 
 function Get-ImageManifest($Pkg) {
@@ -358,8 +359,7 @@ function Get-ImageManifest($Pkg) {
 	} elseif ($Pkg.Repo.IsDocker) {
 		$Headers.Authorization = "Bearer $(Get-DockerToken $Pkg.Repo)"
 	}
-	$Resp = Invoke-PwrWebRequest "$($Pkg.Repo.Uri)/manifests/$($Pkg.Tag)" -Headers $Headers -UseBasicParsing
-	return [string]$Resp | ConvertFrom-Json
+	return Invoke-PwrWebRequest "$($Pkg.Repo.Uri)/manifests/$($Pkg.Tag)" -Headers $Headers | ConvertFrom-Json
 }
 
 function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
@@ -371,7 +371,7 @@ function Invoke-PullImageLayer($Out, $Ref, $Repo, $Digest) {
 		} elseif ($Repo.IsDocker) {
 			$Headers.Authorization = "Bearer $(Get-DockerToken $Repo)"
 		}
-		Invoke-PwrWebRequest "$($Repo.Uri)/blobs/$Digest" -OutFile $Tmp -Headers $Headers
+		Invoke-PwrWebRequest "$($Repo.Uri)/blobs/$Digest" -Headers $Headers -OutFile $Tmp
 	} else {
 		Write-PwrInfo "using cache for $Ref"
 	}
@@ -396,8 +396,7 @@ function Get-RepoTags($Repo) {
 	} elseif ($Repo.IsDocker) {
 		$Headers.Authorization = "Bearer $(Get-DockerToken $Repo)"
 	}
-	$Resp = Invoke-PwrWebRequest "$($Repo.Uri)/tags/list" -Headers $Headers -UseBasicParsing
-	return [string]$Resp | ConvertFrom-Json
+	return Invoke-PwrWebRequest "$($Repo.Uri)/tags/list" -Headers $Headers | ConvertFrom-Json
 }
 
 function Resolve-PwrPackage($Pkg) {
@@ -501,9 +500,9 @@ function Compare-PwrTags {
 	}
 	if ((-not $Offline) -and (-not $CacheExists -or $OutOfDate -or $Fetch)) {
 		try {
-			$Req = Invoke-PwrWebRequest -Uri 'https://api.github.com/repos/airpwr/airpwr/tags' -UseBasicParsing
+			$T = Invoke-PwrWebRequest 'https://api.github.com/repos/airpwr/airpwr/tags'
 			mkdir (Split-Path $Cache -Parent) -Force | Out-Null
-			[IO.File]::WriteAllText($Cache, $Req)
+			[IO.File]::WriteAllText($Cache, $T)
 		} catch {
 			Write-PwrWarning $_
 		}
