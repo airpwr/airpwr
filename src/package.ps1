@@ -359,7 +359,7 @@ function PrunePackages {
 		$stats = Get-ChildItem $content -Recurse | Measure-Object -Sum Length
 		$bytes += $stats.Sum
 		if (Test-Path $content -PathType Container) {
-			[IO.Directory]::Delete($content, $true)
+			[IO.Directory]::Delete("\\?\$(Resolve-Path $content)", $true)
 		}
 	}
 	WriteHost "Total reclaimed space: $($bytes | AsByteString)"

@@ -72,7 +72,7 @@ function CopyToFile {
 		$copied = 0
 		$bufsize = 4096
 		$buf = New-Object byte[] $bufsize
-		$fs = [IO.File]::Open($FilePath, [IO.FileMode]::Create)
+		$fs = [IO.File]::Open("\\?\$FilePath", [IO.FileMode]::Create)
 		$fs.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 		$Digest.Substring(0,12) + ': Extracting ' + (GetProgress -Current $Stream.Position -Total $Stream.Length) + '   ' | WritePeriodicConsole
 		while ($copied -lt $Size) {
@@ -137,7 +137,7 @@ function ExtractTar {
 				throw "suspicious tar filename '$($filename)'"
 			}
 			if ($hdr.Type -eq [char]53 -and $file -ne '') {
-				MakeDirIfNotExist "$root\$file" | Out-Null
+				New-Item -Path "\\?\$root\$file" -ItemType Directory | Out-Null
 			}
 			if ($hdr.Type -in [char]103, [char]120) {
 				$xhdr = ParsePaxHeader -Source $stream -Header $hdr
