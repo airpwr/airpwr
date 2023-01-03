@@ -52,7 +52,7 @@ function WritePeriodicConsole {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Line
 	)
-	if (($null -eq $lastwrite) -or ((get-date) - $lastwrite -gt 34)) {
+	if (($null -eq $lastwrite) -or (((get-date) - $lastwrite) -gt 125)) {
 		[Console]::Write("`r$Line")
 		$script:lastwrite = (get-date)
 	}

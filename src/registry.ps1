@@ -110,7 +110,7 @@ function SaveBlob {
 		$task = $resp.Content.CopyToAsync($fs)
 		while (-not $task.IsCompleted) {
 			$sha256.Substring(0,12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
-			Start-Sleep -Milliseconds 17
+			Start-Sleep -Milliseconds 125
 		}
 	} finally {
 		$fs.Close()

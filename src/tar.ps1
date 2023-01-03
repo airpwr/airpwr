@@ -102,7 +102,7 @@ function DecompressTarGz {
 		$task = $gz.CopyToAsync($stream)
 		while (-not $task.IsCompleted) {
 			$layer.Substring(0,12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
-			Start-Sleep -Milliseconds 17
+			Start-Sleep -Milliseconds 125
 		}
 	} finally {
 		$gz.Dispose()
@@ -137,7 +137,7 @@ function ExtractTar {
 				throw "suspicious tar filename '$($filename)'"
 			}
 			if ($hdr.Type -eq [char]53 -and $file -ne '') {
-				New-Item -Path "\\?\$root\$file" -ItemType Directory | Out-Null
+				New-Item -Path "\\?\$root\$file" -ItemType Directory -Force | Out-Null
 			}
 			if ($hdr.Type -in [char]103, [char]120) {
 				$xhdr = ParsePaxHeader -Source $stream -Header $hdr
