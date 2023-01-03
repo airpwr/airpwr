@@ -50,10 +50,11 @@ function GetProgress {
 function WritePeriodicConsole {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[string]$Line
+		[scriptblock]$DeferLine
 	)
-	if (($null -eq $lastwrite) -or (((get-date) - $lastwrite) -gt 125)) {
-		[Console]::Write("`r$Line")
+	if (($null -eq $lastwrite) -or (((get-date) - $lastwrite).TotalMilliseconds -gt 125)) {
+		$line = & $DeferLine
+		[Console]::Write("`r$line")
 		$script:lastwrite = (get-date)
 	}
 }
