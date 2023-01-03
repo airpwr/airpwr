@@ -1,4 +1,4 @@
-name: Test pwr
+name: Test Airpower
 
 on: [push, pull_request]
 
@@ -9,5 +9,4 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
     - name: Test
-      run: |
-        cd test; ./run.ps1
+      run: .\test.ps1
