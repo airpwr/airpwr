@@ -143,7 +143,14 @@ function Invoke-Airpower {
 					}
 					$resolved = @()
 					foreach ($p in $pkgs) {
-						$resolved += $p | ResolvePackage
+						if ($p -is [object[]]) {
+							foreach ($o in $p) {
+								$resolved += $o | ResolvePackage
+							}
+						} else {
+							$resolved += $p | ResolvePackage
+						}
+
 					}
 					ExecuteScript -Script $script -Pkgs $resolved
 					return
