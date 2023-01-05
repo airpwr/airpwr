@@ -41,6 +41,39 @@ To see avilable commands run
   pwr remote help
 "@
 
+function Flatten {
+	param (
+		[object[]]$Objs
+	)
+	$arr = @()
+	foreach ($obj in $Objs) {
+		if ($obj -is [object[]]) {
+			$arr += flatten $obj
+		} else {
+			$arr += $obj
+		}
+	}
+	return $arr
+}
+
+function OrElsePackages {
+	param (
+		[object[]]$Objs
+	)
+	if ($Objs) {
+		return $Objs
+	}
+	$cfg = FindConfig
+	if ($cfg) {
+		. $cfg
+	}
+	if (-not $PwrPackages) {
+		throw "no packages provided"
+	} else {
+		return [object[]]$PwrPackages
+	}
+}
+
 function Invoke-Airpower {
 	param (
 		[Parameter(ValueFromPipeline)]
@@ -58,7 +91,7 @@ function Invoke-Airpower {
 	end {
 		$ErrorActionPreference = 'Stop'
 		if ($Arguments) {
-			$first, $rest = $Arguments
+			$first, $rest = Flatten $Arguments
 			switch ($first) {
 				{$_ -in 'v', 'version'} {
 					(Get-Module -Name Airpower).Version
@@ -87,29 +120,15 @@ function Invoke-Airpower {
 					return
 				}
 				'load' {
-					if (-not $rest) {
-						$cfg = FindConfig
-						. $cfg
-						$rest = $PwrPackages
-						if (-not $rest) {
-							throw "no packages provided"
-						}
-					}
-					foreach ($p in $rest) {
+					$pkgs = OrElsePackages $rest
+					foreach ($p in $pkgs) {
 						$p | ResolvePackage | LoadPackage
 					}
 					return
 				}
 				'pull' {
-					if (-not $rest) {
-						$cfg = FindConfig
-						. $cfg
-						$rest = $PwrPackages
-						if (-not $rest) {
-							throw "no packages provided"
-						}
-					}
-					foreach ($p in $rest) {
+					$pkgs = OrElsePackages $rest
+					foreach ($p in $pkgs) {
 						$p | AsPackage | PullPackage
 					}
 					return
@@ -129,12 +148,7 @@ function Invoke-Airpower {
 						throw "no scriptblock provided"
 					} elseif ($rest.Count -eq 1) {
 						$script = $rest
-						$cfg = FindConfig
-						. $cfg
-						$pkgs = $PwrPackages
-						if (-not $pkgs) {
-							throw "no packages provided"
-						}
+						$pkgs = OrElsePackages $null
 					} else {
 						$pkgs, $script = $rest[0..$($rest.Count - 2)], $rest[$($rest.Count - 1)]
 					}
@@ -143,14 +157,7 @@ function Invoke-Airpower {
 					}
 					$resolved = @()
 					foreach ($p in $pkgs) {
-						if ($p -is [object[]]) {
-							foreach ($o in $p) {
-								$resolved += $o | ResolvePackage
-							}
-						} else {
-							$resolved += $p | ResolvePackage
-						}
-
+						$resolved += $p | ResolvePackage
 					}
 					ExecuteScript -Script $script -Pkgs $resolved
 					return

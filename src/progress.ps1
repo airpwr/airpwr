@@ -14,14 +14,8 @@ function GetUnicodeBlock {
 	)
 	@{
 		0 = " "
-		1 = "$([char]0x258f)"
-		2 = "$([char]0x258e)"
-		3 = "$([char]0x258d)"
-		4 = "$([char]0x258c)"
-		5 = "$([char]0x258b)"
-		6 = "$([char]0x258a)"
-		7 = "$([char]0x2589)"
-		8 = "$([char]0x2588)"
+		1 = "$([char]0x258c)"
+		2 = "$([char]0x2588)"
 	}[$Index]
 }
 
@@ -37,8 +31,8 @@ function GetProgress {
 	$p = $Current/$Total
 	$inc = 1/$width
 	$full = [int][Math]::Floor($p / $inc)
-	$left = [int][Math]::Floor((($p - ($inc * $full)) / $inc) * 8)
-	$line = "$esc[94m$esc[47m" + ((GetUnicodeBlock 8) * $full)
+	$left = [int][Math]::Floor((($p - ($inc * $full)) / $inc) * 2)
+	$line = "$esc[94m$esc[47m" + ((GetUnicodeBlock 2) * $full)
 	if ($full -ne $width) {
 		$line += (GetUnicodeBlock $left) + (" " * ($width - $full - 1))
 	}

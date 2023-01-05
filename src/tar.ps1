@@ -59,6 +59,7 @@ function ParsePaxHeader {
 }
 
 function CopyToFile {
+	[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Digest', Justification='False Positive')]
 	param (
 		[Parameter(Mandatory)]
 		[IO.Stream]$Source,
@@ -66,6 +67,7 @@ function CopyToFile {
 		[string]$FilePath,
 		[Parameter(Mandatory)]
 		[long]$Size,
+		[Parameter(Mandatory)]
 		[string]$Digest
 	)
 	try {
@@ -93,20 +95,34 @@ function DecompressTarGz {
 	)
 	$tgz = $Path | Split-Path -Leaf
 	$layer = $tgz.Replace('.tar.gz', '')
+	if ($layer -ne (Get-FileHash $Path).Hash) {
+		[IO.File]::Delete($Path)
+		throw "removed $Path because it had corrupted data"
+	}
 	$tar = $Path.Replace('.tar.gz', '.tar')
 	try {
 		$stream = [IO.File]::Open($tar, [IO.FileMode]::OpenOrCreate)
 		$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
-		$fs = [IO.File]::Open($Path, [IO.FileMode]::Open)
-		$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress)
-		$task = $gz.CopyToAsync($stream)
-		while (-not $task.IsCompleted) {
-			$layer.Substring(0,12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
-			Start-Sleep -Milliseconds 125
+		try {
+			$fs = [IO.File]::OpenRead($Path)
+			try {
+				$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress, $true)
+				$cancel = [Threading.CancellationTokenSource]::new()
+				$task = $gz.CopyToAsync($stream, $cancel.Token)
+				while (-not $task.IsCompleted) {
+					$layer.Substring(0,12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
+					Start-Sleep -Milliseconds 125
+				}
+			} finally {
+				$cancel.Cancel($true)
+				$gz.Dispose()
+				$cancel.Dispose()
+			}
+		} finally {
+			[void]$fs.Seek(0, [IO.SeekOrigin]::Begin)
+			$fs.Dispose()
 		}
 	} finally {
-		$gz.Dispose()
-		$fs.Dispose()
 		$stream.Dispose()
 	}
 	return $tar
