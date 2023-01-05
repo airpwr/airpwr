@@ -190,4 +190,5 @@ function Invoke-Airpower {
 	}
 }
 
+Set-Alias -Name 'airpower' -Value 'Invoke-Airpower' -Scope Global
 Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
