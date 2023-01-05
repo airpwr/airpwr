@@ -107,16 +107,13 @@ function DecompressTarGz {
 			$fs = [IO.File]::OpenRead($Path)
 			try {
 				$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress, $true)
-				$cancel = [Threading.CancellationTokenSource]::new()
-				$task = $gz.CopyToAsync($stream, $cancel.Token)
+				$task = $gz.CopyToAsync($stream)
 				while (-not $task.IsCompleted) {
 					$layer.Substring(0,12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
 					Start-Sleep -Milliseconds 125
 				}
 			} finally {
-				$cancel.Cancel($true)
 				$gz.Dispose()
-				$cancel.Dispose()
 			}
 		} finally {
 			[void]$fs.Seek(0, [IO.SeekOrigin]::Begin)

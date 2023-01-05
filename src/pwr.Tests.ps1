@@ -38,7 +38,7 @@ Describe 'Invoke-Airpower' {
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 1 -ParameterFilter { $pkg.Package -eq 'y' }
 		}
 	}
-	Context 'Run' {
+	Context 'Run Config' {
 		BeforeAll {
 			Mock FindConfig {
 				return {
@@ -74,6 +74,21 @@ Describe 'Invoke-Airpower' {
 		It 'Function With Param Flag' {
 			$res = Invoke-Airpower 'run' 'test2' -X 4 -Y 9
 			$res | Should -Be -5
+		}
+	}
+	Context 'Run Without Config' {
+		BeforeAll {
+			function PwrTest {
+				return 2
+			}
+			Mock FindConfig { }
+		}
+		AfterAll {
+			Remove-Item 'function:PwrTest'
+		}
+		It 'Function Without Params' {
+			$res = Invoke-Airpower 'run' 'test'
+			$res | Should -Be 2
 		}
 	}
 }

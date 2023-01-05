@@ -164,14 +164,13 @@ function Invoke-Airpower {
 				}
 				'run' {
 					$cfg = FindConfig
-					if (-not $cfg) {
-						throw "no config file found"
+					if ($cfg) {
+						. $cfg
 					}
 					$first, $rest = $rest
 					if (-not $first) {
 						throw "no script provided"
 					}
-					. $cfg
 					$fn = Get-Item "function:Pwr$first"
 					if ($rest) {
 						$params = @{}
