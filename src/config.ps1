@@ -48,6 +48,14 @@ function GetPwrContentPath {
 	"$(GetPwrHome)\content"
 }
 
+function ResolvePackagePath {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[string]$Digest
+	)
+	return "$(GetPwrContentPath)\$($digest.Substring('sha256:'.Length).Substring(0,12))"
+}
+
 function MakeDirIfNotExist {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]

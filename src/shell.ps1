@@ -45,7 +45,7 @@ function GetPackageDefinition {
 	if (-not $Digest) {
 		return $null
 	}
-	$root = "$(GetPwrContentPath)\$($Digest.Substring('sha256:'.Length))"
+	$root = ResolvePackagePath -Digest $Digest
 	return (Get-Content -Raw "$root\.pwr").Replace('${.}', $root.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-HashTable
 }
 

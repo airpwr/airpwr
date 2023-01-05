@@ -138,7 +138,7 @@ function ExtractTar {
 	try {
 		$tar = $Path | Split-Path -Leaf
 		$layer = $tar.Replace('.tar', '')
-		$root = "$(GetPwrContentPath)\$Digest"
+		$root = ResolvePackagePath -Digest $Digest
 		MakeDirIfNotExist -Path $root | Out-Null
 		$stream = [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate)
 		$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null

@@ -39,13 +39,6 @@ function AsTag {
 	throw "failed to parse tag: $Tag"
 }
 
-function SortTags {
-	param (
-		[object[]]$Tags
-	)
-	return $Tags | Sort-Object -Property {$_.Major}, {$_.Minor}, {$_.Patch}, {$_.Build} -Descending
-}
-
 function AsTagString {
 	param (
 		[Parameter(
@@ -257,7 +250,7 @@ function SavePackage {
 			if ($layer.mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
 				try {
 					$tar = $layer.Digest | SaveBlob | DecompressTarGz
-					$tar | ExtractTar -Digest $digest.Substring('sha256:'.Length)
+					$tar | ExtractTar -Digest $digest
 					"$($layer.Digest.Substring('sha256:'.Length).Substring(0, 12)): Pull complete" + ' ' * 60 | WriteConsole
 					$tmp += $tar, "$tar.gz"
 				} finally {
@@ -364,14 +357,6 @@ function PrunePackages {
 	}
 	WriteHost "Total reclaimed space: $($bytes | AsByteString)"
 	$db | OutPwrDB
-}
-
-function ResolvePackagePath {
-	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
-		[string]$Digest
-	)
-	return "$(GetPwrContentPath)\$($digest.Substring('sha256:'.Length))"
 }
 
 class Digest {
