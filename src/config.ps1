@@ -22,7 +22,7 @@ function GetPwrHome {
 	} elseif ($env:PwrHome) {
 		$env:PwrHome
 	} else {
-		"$env:LocalAppData\pwr"
+		"$env:LocalAppData\Airpower"
 	}
 }
 
@@ -41,7 +41,7 @@ function GetPwrDBPath {
 }
 
 function GetPwrTempPath {
-	"$(GetPwrHome)\tmp"
+	"$(GetPwrHome)\temp"
 }
 
 function GetPwrContentPath {
