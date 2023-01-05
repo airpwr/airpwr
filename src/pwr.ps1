@@ -174,7 +174,21 @@ function Invoke-Airpower {
 					. $cfg
 					$fn = Get-Item "function:Pwr$first"
 					if ($rest) {
-						& $fn @rest
+						$params = @{}
+						$leftover = [object[]]@()
+						for ($i = 0; $i -lt $rest.Count; $i++) {
+							if ($fn.parameters.keys -and ($rest[$i] -match '^-([^:]+)(?::(.*))?$') -and ($Matches[1] -in $fn.parameters.keys)) {
+								if ($Matches[2]) {
+									$params.$($Matches[1]) = $Matches[2]
+								} else {
+									$params.$($Matches[1]) = $rest[$i+1]
+									$i++
+								}
+							} else {
+								$leftover += $rest[$i]
+							}
+						}
+						& $fn @params @leftover
 					} else {
 						& $fn
 					}
