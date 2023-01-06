@@ -15,7 +15,7 @@ Describe "Untargz" {
 		Mock WritePeriodicConsole {}
 	}
 	AfterAll {
-		[IO.Directory]::Delete($PwrHome, $true)
+		[IO.Directory]::Delete("\\?\$PwrHome", $true)
 		[IO.File]::Delete($tgz.Replace('.tar.gz', '.tar'))
 	}
 	It "Extracts" {
