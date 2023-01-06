@@ -1,11 +1,5 @@
 # U+2588	█	Full block
-# U+2589	▉	Left seven eighths block
-# U+258A	▊	Left three quarters block
-# U+258B	▋	Left five eighths block
 # U+258C	▌	Left half block
-# U+258D	▍	Left three eighths block
-# U+258E	▎	Left one quarter block
-# U+258F	▏	Left one eighth block
 
 function GetUnicodeBlock {
 	param (
@@ -33,7 +27,7 @@ function GetProgress {
 	$full = [int][Math]::Floor($p / $inc)
 	$left = [int][Math]::Floor((($p - ($inc * $full)) / $inc) * 2)
 	$line = "$esc[94m$esc[47m" + ((GetUnicodeBlock 2) * $full)
-	if ($full -ne $width) {
+	if ($full -lt $width) {
 		$line += (GetUnicodeBlock $left) + (" " * ($width - $full - 1))
 	}
 	$stat = '{0,10} / {1,-10}' -f ($Current | AsByteString -FixDecimals), ($Total | AsByteString)

@@ -4,15 +4,18 @@ param (
 
 $Paths = if ($Paths) { $Paths } else { @('.\src') }
 
-if (-not (Test-Path .\.modules)) {
-	New-Item -Path .\.modules -ItemType Directory
+$modules = 'ps_modules'
+
+if (-not (Test-Path $modules)) {
+	New-Item -Path $modules -ItemType Directory
 }
 
 foreach ($name in 'Pester', 'PSScriptAnalyzer') {
-	if (-not (Test-Path ".\.modules\$name")) {
-		Save-Module -Name $name -Path .\.modules
+	if (-not (Test-Path "$modules\$name")) {
+		Save-Module -Name $name -Path $modules
 	}
-	Import-Module (Get-ChildItem -Path ".\.modules\$name" -Recurse -Include "$name.psd1").Fullname
+	Remove-Module -Name $name -ErrorAction SilentlyContinue
+	Import-Module (Get-ChildItem -Path "$modules\$name" -Recurse -Include "$name.psd1").Fullname
 }
 
 foreach ($path in $Paths) {
