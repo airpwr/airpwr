@@ -70,12 +70,12 @@ function CopyToFile {
 		[Parameter(Mandatory)]
 		[string]$Digest
 	)
+	$fs = [IO.File]::Open("\\?\$FilePath", [IO.FileMode]::Create)
+	$fs.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 	try {
 		$copied = 0
 		$bufsize = 4096
 		$buf = New-Object byte[] $bufsize
-		$fs = [IO.File]::Open("\\?\$FilePath", [IO.FileMode]::Create)
-		$fs.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 		while ($copied -lt $Size) {
 			{ $Digest.Substring(0,12) + ': Extracting ' + (GetProgress -Current $Stream.Position -Total $Stream.Length) + '   ' } | WritePeriodicConsole
 			$amount = if (($Size - $copied) -gt $bufsize) { $bufsize } else { $Size - $copied }
