@@ -67,7 +67,7 @@ function AsByteString {
 		[long]$Bytes,
 		[switch]$FixDecimals
 	)
-	$n = [math]::Abs($Bytes)
+	$n = [Math]::Abs($Bytes)
 	$p = 0
 	while ($n -gt 1024) {
 		$n /= 1024
@@ -79,7 +79,7 @@ function AsByteString {
 		6 = 'M'
 		9 = 'G'
 	}
-	return "{0:0.$(if ($FixDecimals) { '00' } else { '##' })} {1}B" -f $n, $r[[math]::min(9, $p)]
+	return "{0:0.$(if ($FixDecimals) { '00' } else { '##' })} {1}B" -f $n, $r[[Math]::Min(9, $p)]
 }
 
 class Size : IComparable {

@@ -3,7 +3,6 @@
 . $PSScriptRoot\progress.ps1
 . $PSScriptRoot\tar.ps1
 
-
 function GetDockerRepo {
 	return 'airpower/shipyard'
 }
@@ -109,7 +108,7 @@ function SaveBlob {
 		$size = $resp.Content.Headers.ContentLength + $fs.Length
 		$task = $resp.Content.CopyToAsync($fs)
 		while (-not $task.IsCompleted) {
-			$sha256.Substring(0,12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
+			$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
 			Start-Sleep -Milliseconds 125
 		}
 	} finally {
