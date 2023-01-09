@@ -167,7 +167,7 @@ function Invoke-Airpower {
 					if ($cfg) {
 						. $cfg
 					}
-					$first, $rest = $rest
+					$first, [object[]]$rest = $rest
 					if (-not $first) {
 						throw "no script provided"
 					}

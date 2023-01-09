@@ -53,7 +53,10 @@ Describe 'Invoke-Airpower' {
 						return $X - $Y
 					}
 					function PwrTest3 {
-						return 2
+						param (
+							[string]$Option = 'hello'
+						)
+						return $Option
 					}
 				}
 			}
@@ -74,6 +77,10 @@ Describe 'Invoke-Airpower' {
 		It 'Function With Param Flag' {
 			$res = Invoke-Airpower 'run' 'test2' -X 4 -Y 9
 			$res | Should -Be -5
+		}
+		It 'Function With Param Default' {
+			$res = Invoke-Airpower 'run' 'test3' world
+			$res | Should -Be 'world'
 		}
 	}
 	Context 'Run Without Config' {
