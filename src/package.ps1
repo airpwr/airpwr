@@ -214,7 +214,7 @@ function InstallPackage { # $db, $status
 
 function PullPackage {
 	param (
-		[Parameter(Mandatory,ValueFromPipeline)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
 	$manifest = $Pkg | ResolveRemoteRef | GetManifest
@@ -237,7 +237,7 @@ function PullPackage {
 
 function SavePackage {
 	param (
-		[Parameter(Mandatory,ValueFromPipeline)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8

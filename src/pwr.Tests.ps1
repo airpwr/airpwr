@@ -1,5 +1,5 @@
 BeforeAll {
-	. $PSCommandPath.Replace('.Tests.ps1','.ps1')
+	. $PSCommandPath.Replace('.Tests.ps1', '.ps1')
 }
 
 Describe 'Invoke-Airpower' {
