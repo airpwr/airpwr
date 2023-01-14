@@ -77,7 +77,7 @@ function CopyToFile {
 		$bufsize = 4096
 		$buf = New-Object byte[] $bufsize
 		while ($copied -lt $Size) {
-			{ $Digest.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Stream.Position -Total $Stream.Length) + '   ' } | WritePeriodicConsole
+			{ $Digest.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.Position -Total $Source.Length) + '   ' } | WritePeriodicConsole
 			$amount = if (($Size - $copied) -gt $bufsize) { $bufsize } else { $Size - $copied }
 			$Source.Read($buf, 0, $amount) | Out-Null
 			$fs.Write($buf, 0, $amount) | Out-Null

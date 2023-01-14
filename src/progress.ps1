@@ -40,10 +40,10 @@ function WritePeriodicConsole {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[scriptblock]$DeferLine
 	)
-	if (($null -eq $lastwrite) -or (((get-date) - $lastwrite).TotalMilliseconds -gt 125)) {
+	if (($null -eq $lastwrite) -or (((Get-Date) - $lastwrite).TotalMilliseconds -gt 125)) {
 		$line = & $DeferLine
 		[Console]::Write("`r$line")
-		$script:lastwrite = (get-date)
+		$script:lastwrite = (Get-Date)
 	}
 }
 
