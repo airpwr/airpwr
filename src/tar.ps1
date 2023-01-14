@@ -77,7 +77,7 @@ function CopyToFile {
 		$bufsize = 4096
 		$buf = New-Object byte[] $bufsize
 		while ($copied -lt $Size) {
-			{ $Digest.Substring(0,12) + ': Extracting ' + (GetProgress -Current $Stream.Position -Total $Stream.Length) + '   ' } | WritePeriodicConsole
+			{ $Digest.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Stream.Position -Total $Stream.Length) + '   ' } | WritePeriodicConsole
 			$amount = if (($Size - $copied) -gt $bufsize) { $bufsize } else { $Size - $copied }
 			$Source.Read($buf, 0, $amount) | Out-Null
 			$fs.Write($buf, 0, $amount) | Out-Null
@@ -109,7 +109,7 @@ function DecompressTarGz {
 				$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress, $true)
 				$task = $gz.CopyToAsync($stream)
 				while (-not $task.IsCompleted) {
-					$layer.Substring(0,12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
+					$layer.Substring(0, 12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
 					Start-Sleep -Milliseconds 125
 				}
 			} finally {
@@ -163,7 +163,7 @@ function ExtractTar {
 			}
 			$leftover = $size % 512
 			if ($leftover -gt 0) {
-				$stream.Seek(512 - ($size % 512), [IO.SeekOrigin]::Current) | Out-Null
+				$stream.Seek(512 - $leftover, [IO.SeekOrigin]::Current) | Out-Null
 			}
 		}
 	} finally {
