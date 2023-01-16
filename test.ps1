@@ -7,7 +7,7 @@ $Paths = if ($Paths) { $Paths } else { @('.\src') }
 $modules = 'ps_modules'
 
 if (-not (Test-Path $modules)) {
-	New-Item -Path $modules -ItemType Directory
+	New-Item -Path $modules -ItemType Directory | Out-Null
 }
 
 foreach ($name in 'Pester', 'PSScriptAnalyzer') {
