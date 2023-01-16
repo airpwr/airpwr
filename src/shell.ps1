@@ -9,32 +9,45 @@ function GetSessionState {
 }
 
 function SaveSessionState {
-	Set-Variable -Name 'PwrSaveState' -Value (GetSessionState) -Scope Global
+	param (
+		[Parameter(Mandatory)]
+		[string]$GUID
+	)
+	Set-Variable -Name "AirpowerSaveState_$GUID" -Value (GetSessionState) -Scope Global
 }
 
 function ClearSessionState {
-	$default = '__LastHistoryId', '__VSCodeOriginalPrompt', '__VSCodeOriginalPSConsoleHostReadLine', '?', '^', '$', 'args', 'ConfirmPreference', 'DebugPreference', 'EnabledExperimentalFeatures', 'Error', 'ErrorActionPreference', 'ErrorView', 'ExecutionContext', 'false', 'FormatEnumerationLimit', 'HOME', 'Host', 'InformationPreference', 'input', 'IsCoreCLR', 'IsLinux', 'IsMacOS', 'IsWindows', 'MaximumHistoryCount', 'MyInvocation', 'NestedPromptLevel', 'null', 'OutputEncoding', 'PID', 'PROFILE', 'ProgressPreference', 'PSBoundParameters', 'PSCommandPath', 'PSCulture', 'PSDefaultParameterValues', 'PSEdition', 'PSEmailServer', 'PSHOME', 'PSScriptRoot', 'PSSessionApplicationName', 'PSSessionConfigurationName', 'PSSessionOption', 'PSStyle', 'PSUICulture', 'PSVersionTable', 'PWD', 'PwrSaveState', 'ShellId', 'StackTrace', 'true', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference', 'ConsoleFileName', 'MaximumAliasCount', 'MaximumDriveCount', 'MaximumErrorCount', 'MaximumFunctionCount', 'MaximumVariableCount'
+	param (
+		[Parameter(Mandatory)]
+		[string]$GUID
+	)
+	$default = "AirpowerSaveState_$GUID", '__LastHistoryId', '__VSCodeOriginalPrompt', '__VSCodeOriginalPSConsoleHostReadLine', '?', '^', '$', 'args', 'ConfirmPreference', 'DebugPreference', 'EnabledExperimentalFeatures', 'Error', 'ErrorActionPreference', 'ErrorView', 'ExecutionContext', 'false', 'FormatEnumerationLimit', 'HOME', 'Host', 'InformationPreference', 'input', 'IsCoreCLR', 'IsLinux', 'IsMacOS', 'IsWindows', 'MaximumHistoryCount', 'MyInvocation', 'NestedPromptLevel', 'null', 'OutputEncoding', 'PID', 'PROFILE', 'ProgressPreference', 'PSBoundParameters', 'PSCommandPath', 'PSCulture', 'PSDefaultParameterValues', 'PSEdition', 'PSEmailServer', 'PSHOME', 'PSScriptRoot', 'PSSessionApplicationName', 'PSSessionConfigurationName', 'PSSessionOption', 'PSStyle', 'PSUICulture', 'PSVersionTable', 'PWD', 'ShellId', 'StackTrace', 'true', 'VerbosePreference', 'WarningPreference', 'WhatIfPreference', 'ConsoleFileName', 'MaximumAliasCount', 'MaximumDriveCount', 'MaximumErrorCount', 'MaximumFunctionCount', 'MaximumVariableCount'
 	foreach ($v in (Get-Variable -Scope Global)) {
 		if ($v.name -notin $default) {
 			Remove-Variable -Name $v.name -Scope Global -Force -ErrorAction SilentlyContinue
 		}
 	}
 	foreach ($k in [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User).keys) {
-		if ($k -notin 'temp', 'tmp', 'pwrhome') {
+		if ($k -notin 'temp', 'tmp', 'AirpowerPath') {
 			Remove-Item "env:$k" -Force -ErrorAction SilentlyContinue
 		}
 	}
-	Remove-Item 'env:PwrLoadedPackages' -Force -ErrorAction SilentlyContinue
+	Remove-Item 'env:AirpowerLoadedPackages' -Force -ErrorAction SilentlyContinue
 }
 
 function RestoreSessionState {
-	foreach ($v in $PwrSaveState.vars) {
+	param (
+		[Parameter(Mandatory)]
+		[string]$GUID
+	)
+	$state = (Get-Variable "AirpowerSaveState_$GUID").value
+	foreach ($v in $state.vars) {
 		Set-Variable -Name $v.name -Value $v.value -Scope Global -Force -ErrorAction SilentlyContinue
 	}
-	foreach ($e in $PwrSaveState.env) {
+	foreach ($e in $state.env) {
 		Set-Item -Path "env:$($e.name)" -Value $e.value -Force -ErrorAction SilentlyContinue
 	}
-	Remove-Variable 'PwrSaveState' -Force -Scope Global -ErrorAction SilentlyContinue
+	Remove-Variable "AirpowerSaveState_$GUID" -Force -Scope Global -ErrorAction SilentlyContinue
 }
 
 function GetPackageDefinition {
@@ -84,9 +97,9 @@ function LoadPackage {
 	}
 	$Pkg.Digest = $digest
 	WriteHost "Digest: $digest"
-	if ($digest -notin ($env:PwrLoadedPackages -split ';')) {
+	if ($digest -notin ($env:AirpowerLoadedPackages -split ';')) {
 		$Pkg | ConfigurePackage
-		$env:PwrLoadedPackages += "$(if ($env:PwrLoadedPackages) { ';' })$digest"
+		$env:AirpowerLoadedPackages += "$(if ($env:AirpowerLoadedPackages) { ';' })$digest"
 		WriteHost "Status: Session configured for $ref"
 	} else {
 		WriteHost "Status: Session is up to date for $ref"
@@ -100,9 +113,10 @@ function ExecuteScript {
 		[Parameter(Mandatory)]
 		[Collections.Hashtable[]]$Pkgs
 	)
+	$GUID = New-Guid
+	SaveSessionState $GUID
 	try {
-		SaveSessionState
-		ClearSessionState
+		ClearSessionState $GUID
 		foreach ($pkg in $Pkgs) {
 			$pkg.digest = $pkg | ResolvePackageDigest
 			$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"
@@ -114,6 +128,6 @@ function ExecuteScript {
 		$env:Path = "$(if ($env:Path) { "$env:Path;" })$env:SYSTEMROOT;$env:SYSTEMROOT\System32;$PSHOME"
 		& $Script
 	} finally {
-		RestoreSessionState
+		RestoreSessionState $GUID
 	}
 }

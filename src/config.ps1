@@ -16,11 +16,11 @@ function ConvertTo-HashTable {
 	return $Table
 }
 
-function GetPwrHome {
-	if ($PwrHome) {
-		$PwrHome
-	} elseif ($env:PwrHome) {
-		$env:PwrHome
+function GetAirpowerPath {
+	if ($AirpowerPath) {
+		$AirpowerPath
+	} elseif ($env:AirpowerPath) {
+		$env:AirpowerPath
 	} else {
 		"$env:LocalAppData\Airpower"
 	}
@@ -37,15 +37,15 @@ function GetPwrPullPolicy {
 }
 
 function GetPwrDBPath {
-	"$(GetPwrHome)\pwrdb"
+	"$(GetAirpowerPath)\db"
 }
 
 function GetPwrTempPath {
-	"$(GetPwrHome)\temp"
+	"$(GetAirpowerPath)\temp"
 }
 
 function GetPwrContentPath {
-	"$(GetPwrHome)\content"
+	"$(GetAirpowerPath)\content"
 }
 
 function ResolvePackagePath {
@@ -73,7 +73,7 @@ function OutPwrDB {
 			ValueFromPipeline = $true)]
 		[Collections.Hashtable]$PwrDB
 	)
-	MakeDirIfNotExist (GetPwrHome)
+	MakeDirIfNotExist (GetAirpowerPath)
 	$PwrDB |
 		ConvertTo-Json -Compress -Depth 10 |
 		Out-File -FilePath (GetPwrDBPath) -Encoding 'UTF8' -Force

@@ -1,5 +1,13 @@
 BeforeAll {
 	. $PSCommandPath.Replace('.Tests.ps1','.ps1')
+	$script:ModulePath = $env:PSModulePath
+	$env:PSModulePath = $null
+	Remove-Module Airpower -ErrorAction SilentlyContinue
+	$script:pwr = (Get-Item 'function:Invoke-Airpower').ScriptBlock
+}
+
+AfterAll {
+	$env:PSModulePath = $ModulePath
 }
 
 Describe 'Invoke-Airpower' {
@@ -14,25 +22,25 @@ Describe 'Invoke-Airpower' {
 			}
 			Mock LoadPackage { }
 			Mock FindConfig {
-				$script:PwrPackages = 'a', 'b'
+				$script:AirpowerPackages = 'a', 'b'
 			}
 		}
 		AfterAll {
-			$script:PwrPackages = $null
+			$script:AirpowerPackages = $null
 		}
 		It 'Load Without Packages' {
-			Invoke-Airpower 'load'
+			& $pwr 'load'
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 1 -ParameterFilter { $pkg.Package -eq 'a' }
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 1 -ParameterFilter { $pkg.Package -eq 'b' }
 		}
 		It 'Load With Package' {
-			Invoke-Airpower 'load' 'x'
+			& $pwr 'load' 'x'
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 1 -ParameterFilter { $pkg.Package -eq 'x' }
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 0 -ParameterFilter { $pkg.Package -eq 'a' }
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 0 -ParameterFilter { $pkg.Package -eq 'b' }
 		}
-		It 'Load Mixed Args' {
-			Invoke-Airpower 'load' 'x', 'z' 'y'
+		It 'Load Multiple' {
+			& $pwr 'load' 'x', 'z', 'y'
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 1 -ParameterFilter { $pkg.Package -eq 'x' }
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 1 -ParameterFilter { $pkg.Package -eq 'z' }
 			Should -Invoke -CommandName 'LoadPackage' -Exactly -Times 1 -ParameterFilter { $pkg.Package -eq 'y' }
@@ -42,17 +50,17 @@ Describe 'Invoke-Airpower' {
 		BeforeAll {
 			Mock FindConfig {
 				return {
-					function PwrTest1 {
+					function AirpowerTest1 {
 						return 2
 					}
-					function PwrTest2 {
+					function AirpowerTest2 {
 						param (
 							[int]$X,
 							[int]$Y
 						)
 						return $X - $Y
 					}
-					function PwrTest3 {
+					function AirpowerTest3 {
 						param (
 							[string]$Option = 'hello'
 						)
@@ -62,40 +70,82 @@ Describe 'Invoke-Airpower' {
 			}
 		}
 		It 'Function Without Params' {
-			$res = Invoke-Airpower 'run' 'test1'
+			$res = & $pwr 'run' 'test1'
 			$res | Should -Be 2
 		}
 		It 'Function With Param Splat' {
 			$p = @{X=7; Y=3}
-			$res = Invoke-Airpower 'run' 'test2' @p
+			$res = & $pwr 'run' 'test2' @p
 			$res | Should -Be 4
 		}
 		It 'Function With Param Position' {
-			$res = Invoke-Airpower 'run' 'test2' 9 2
+			$res = & $pwr 'run' 'test2' 9 2
+			$res | Should -Be 7
+		}
+		It 'Function With Param Position Extra' {
+			$res = & $pwr 'run' 'test2' 9 2 11
 			$res | Should -Be 7
 		}
 		It 'Function With Param Flag' {
-			$res = Invoke-Airpower 'run' 'test2' -X 4 -Y 9
+			$res = & $pwr 'run' 'test2' -X 4 -Y 9
 			$res | Should -Be -5
 		}
 		It 'Function With Param Default' {
-			$res = Invoke-Airpower 'run' 'test3' world
+			$res = & $pwr 'run' 'test3' world
 			$res | Should -Be 'world'
 		}
 	}
 	Context 'Run Without Config' {
 		BeforeAll {
-			function PwrTest {
+			function AirpowerTest {
 				return 2
 			}
 			Mock FindConfig { }
 		}
 		AfterAll {
-			Remove-Item 'function:PwrTest'
+			Remove-Item 'function:AirpowerTest'
 		}
 		It 'Function Without Params' {
-			$res = Invoke-Airpower 'run' 'test'
+			$res = & $pwr 'run' 'test'
 			$res | Should -Be 2
+		}
+	}
+	Context 'ErrorAction' {
+		BeforeAll {
+			function SomeFn { }
+			Mock SomeFn { }
+			Mock FindConfig { }
+		}
+		It 'Stops' {
+			try {
+				& $pwr 'load' -ErrorAction Stop
+				SomeFn
+			} catch {
+				'expect error'
+			} finally {
+				Should -Invoke SomeFn -Times 0 -Exactly
+			}
+		}
+		It 'Continues' {
+			try {
+				& $pwr 'load' -ErrorAction SilentlyContinue
+				SomeFn
+			} finally {
+				Should -Invoke SomeFn -Times 1 -Exactly
+			}
+		}
+	}
+	Context 'Exec' {
+		BeforeAll {
+			Mock Invoke-AirpowerExec { }
+		}
+		It 'Exec Without Packages' {
+			& $pwr 'exec' -script { 'hi' }
+			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 0 -and $Script.ToString() -eq " 'hi' " }
+		}
+		It 'Exec With Packages' {
+			& $pwr 'exec' 'a', 'b' { 'hi' }
+			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 2 -and $Script.ToString() -eq " 'hi' " }
 		}
 	}
 }

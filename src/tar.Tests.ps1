@@ -7,15 +7,15 @@ $script:tgz = "$root\70f0de6b501a64372ea26d2c12d2eead94f77391bd040c96f2d8b92ffd5
 
 Describe "Untargz" {
 	BeforeAll {
-		$script:PwrHome = "$root\airpower"
+		$script:AirpowerPath = "$root\airpower"
 		Mock ResolvePackagePath {
-			return "$PwrHome\0123456789abc"
+			return "$AirpowerPath\0123456789abc"
 		}
 		Mock WriteConsole {}
 		Mock WritePeriodicConsole {}
 	}
 	AfterAll {
-		[IO.Directory]::Delete("\\?\$PwrHome", $true)
+		[IO.Directory]::Delete("\\?\$AirpowerPath", $true)
 		[IO.File]::Delete($tgz.Replace('.tar.gz', '.tar'))
 	}
 	It "Extracts" {

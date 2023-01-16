@@ -100,23 +100,22 @@ function DecompressTarGz {
 		throw "removed $Path because it had corrupted data"
 	}
 	$tar = $Path.Replace('.tar.gz', '.tar')
+	$stream = [IO.File]::Open($tar, [IO.FileMode]::OpenOrCreate)
+	$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 	try {
-		$stream = [IO.File]::Open($tar, [IO.FileMode]::OpenOrCreate)
-		$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
+		$fs = [IO.File]::OpenRead($Path)
 		try {
-			$fs = [IO.File]::OpenRead($Path)
+			$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress, $true)
 			try {
-				$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress, $true)
 				$task = $gz.CopyToAsync($stream)
 				while (-not $task.IsCompleted) {
-					$layer.Substring(0,12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
+					$layer.Substring(0, 12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
 					Start-Sleep -Milliseconds 125
 				}
 			} finally {
 				$gz.Dispose()
 			}
 		} finally {
-			[void]$fs.Seek(0, [IO.SeekOrigin]::Begin)
 			$fs.Dispose()
 		}
 	} finally {
@@ -132,13 +131,13 @@ function ExtractTar {
 		[Parameter(Mandatory)]
 		[string]$Digest
 	)
+	$tar = $Path | Split-Path -Leaf
+	$layer = $tar.Replace('.tar', '')
+	$root = ResolvePackagePath -Digest $Digest
+	MakeDirIfNotExist -Path $root | Out-Null
+	$stream = [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate)
+	$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 	try {
-		$tar = $Path | Split-Path -Leaf
-		$layer = $tar.Replace('.tar', '')
-		$root = ResolvePackagePath -Digest $Digest
-		MakeDirIfNotExist -Path $root | Out-Null
-		$stream = [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate)
-		$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 		$buffer = New-Object byte[] 512
 		while ($stream.Position -lt $stream.Length) {
 			$stream.Read($buffer, 0, 512) | Out-Null
