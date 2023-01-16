@@ -22,8 +22,8 @@ function GetProgress {
 	)
 	$width = 30
 	$esc = [char]27
-	$p = $Current/$Total
-	$inc = 1/$width
+	$p = $Current / $Total
+	$inc = 1 / $width
 	$full = [int][Math]::Floor($p / $inc)
 	$left = [int][Math]::Floor((($p - ($inc * $full)) / $inc) * 2)
 	$line = "$esc[94m$esc[47m" + ((GetUnicodeBlock 2) * $full)

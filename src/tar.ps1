@@ -15,25 +15,25 @@ function FromOctalString {
 function ParseTarHeader {
 	param (
 		[Parameter(Mandatory)]
-		[byte[]]$buffer
+		[byte[]]$Buffer
 	)
 	return @{
-		Filename = [Text.Encoding]::ASCII.GetString($buffer[0..99]).Trim(0)
-		Mode = [Text.Encoding]::ASCII.GetString($buffer[100..107]).Trim(0) | FromOctalString
-		OwnerID = [Text.Encoding]::ASCII.GetString($buffer[108..115]).Trim(0) | FromOctalString
-		GroupID = [Text.Encoding]::ASCII.GetString($buffer[116..123]).Trim(0) | FromOctalString
-		Size = [Text.Encoding]::ASCII.GetString($buffer[124..135]).Trim(0) | FromOctalString
-		Modified = [Text.Encoding]::ASCII.GetString($buffer[136..147]).Trim(0) | FromOctalString
-		Checksum = [Text.Encoding]::ASCII.GetString($buffer[148..155])
-		Type = [Text.Encoding]::ASCII.GetString($buffer[156..156]).Trim(0)
-		Link = [Text.Encoding]::ASCII.GetString($buffer[157..256]).Trim(0)
-		UStar = [Text.Encoding]::ASCII.GetString($buffer[257..262]).Trim(0)
-		UStarVersion = [Text.Encoding]::ASCII.GetString($buffer[263..264]).Trim(0)
-		Owner = [Text.Encoding]::ASCII.GetString($buffer[265..296]).Trim(0)
-		Group = [Text.Encoding]::ASCII.GetString($buffer[297..328]).Trim(0)
-		DeviceMajor = [Text.Encoding]::ASCII.GetString($buffer[329..336]).Trim(0)
-		DeviceMinor = [Text.Encoding]::ASCII.GetString($buffer[337..344]).Trim(0)
-		FilenamePrefix = [Text.Encoding]::ASCII.GetString($buffer[345..499]).Trim(0)
+		Filename = [Text.Encoding]::ASCII.GetString($Buffer[0..99]).Trim(0)
+		Mode = [Text.Encoding]::ASCII.GetString($Buffer[100..107]).Trim(0) | FromOctalString
+		OwnerID = [Text.Encoding]::ASCII.GetString($Buffer[108..115]).Trim(0) | FromOctalString
+		GroupID = [Text.Encoding]::ASCII.GetString($Buffer[116..123]).Trim(0) | FromOctalString
+		Size = [Text.Encoding]::ASCII.GetString($Buffer[124..135]).Trim(0) | FromOctalString
+		Modified = [Text.Encoding]::ASCII.GetString($Buffer[136..147]).Trim(0) | FromOctalString
+		Checksum = [Text.Encoding]::ASCII.GetString($Buffer[148..155])
+		Type = [Text.Encoding]::ASCII.GetString($Buffer[156..156]).Trim(0)
+		Link = [Text.Encoding]::ASCII.GetString($Buffer[157..256]).Trim(0)
+		UStar = [Text.Encoding]::ASCII.GetString($Buffer[257..262]).Trim(0)
+		UStarVersion = [Text.Encoding]::ASCII.GetString($Buffer[263..264]).Trim(0)
+		Owner = [Text.Encoding]::ASCII.GetString($Buffer[265..296]).Trim(0)
+		Group = [Text.Encoding]::ASCII.GetString($Buffer[297..328]).Trim(0)
+		DeviceMajor = [Text.Encoding]::ASCII.GetString($Buffer[329..336]).Trim(0)
+		DeviceMinor = [Text.Encoding]::ASCII.GetString($Buffer[337..344]).Trim(0)
+		FilenamePrefix = [Text.Encoding]::ASCII.GetString($Buffer[345..499]).Trim(0)
 	}
 }
 
@@ -78,7 +78,8 @@ function CopyToFile {
 		$buf = New-Object byte[] $bufsize
 		while ($copied -lt $Size) {
 			{ $Digest.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.Position -Total $Source.Length) + '   ' } | WritePeriodicConsole
-			$amount = if (($Size - $copied) -gt $bufsize) { $bufsize } else { $Size - $copied }
+			$sz = $Size - $copied
+			$amount = if ($sz -gt $bufsize) { $bufsize } else { $sz }
 			$Source.Read($buf, 0, $amount) | Out-Null
 			$fs.Write($buf, 0, $amount) | Out-Null
 			$copied += $amount
