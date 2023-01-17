@@ -111,6 +111,7 @@ function SaveBlob {
 			$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
 			Start-Sleep -Milliseconds 125
 		}
+		$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $size -Total $size) + '  ' | WriteConsole
 	} finally {
 		$fs.Close()
 	}

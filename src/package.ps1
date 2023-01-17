@@ -257,21 +257,19 @@ function SavePackage {
 	try {
 		$manifest = $Resp | GetJsonResponse
 		$digest = $Resp | GetDigest
-		$tmp = @()
+		$temp = @()
 		foreach ($layer in $manifest.layers) {
 			if ($layer.mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
 				try {
-					$tar = $layer.Digest | SaveBlob | DecompressTarGz
-					$tar | ExtractTar -Digest $digest
+					$temp += $layer.Digest | SaveBlob | ExtractTarGz -Digest $digest
 					"$($layer.Digest.Substring('sha256:'.Length).Substring(0, 12)): Pull complete" + ' ' * 60 | WriteConsole
-					$tmp += $tar, "$tar.gz"
 				} finally {
 					[Console]::WriteLine()
 				}
 			}
 		}
-		foreach ($file in $tmp) {
-			[IO.File]::Delete($file)
+		foreach ($tmp in $temp) {
+			[IO.File]::Delete($tmp)
 		}
 	} finally {
 		[Console]::CursorVisible = $true

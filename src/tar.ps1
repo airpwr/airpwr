@@ -58,41 +58,33 @@ function ParsePaxHeader {
 	return $xhdr
 }
 
-function CopyToFile {
-	[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Digest', Justification='False Positive')]
+function CopyToFileAsync {
 	param (
-		[Parameter(Mandatory)]
-		[IO.Stream]$Source,
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[IO.Compression.GZipStream]$Source,
 		[Parameter(Mandatory)]
 		[string]$FilePath,
 		[Parameter(Mandatory)]
-		[long]$Size,
-		[Parameter(Mandatory)]
-		[string]$Digest
+		[long]$Size
 	)
+	$buf = New-Object byte[] $Size
 	$fs = [IO.File]::Open("\\?\$FilePath", [IO.FileMode]::Create)
 	$fs.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 	try {
-		$copied = 0
-		$bufsize = 4096
-		$buf = New-Object byte[] $bufsize
-		while ($copied -lt $Size) {
-			{ $Digest.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.Position -Total $Source.Length) + '   ' } | WritePeriodicConsole
-			$sz = $Size - $copied
-			$amount = if ($sz -gt $bufsize) { $bufsize } else { $sz }
-			$Source.Read($buf, 0, $amount) | Out-Null
-			$fs.Write($buf, 0, $amount) | Out-Null
-			$copied += $amount
-		}
-	} finally {
+		$Source.Read($buf, 0, $Size) | Out-Null
+		return $fs, $fs.WriteAsync($buf, 0, $Size)
+	} catch {
 		$fs.Dispose()
+		throw
 	}
 }
 
-function DecompressTarGz {
+function ExtractTarGz {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[string]$Path
+		[string]$Path,
+		[Parameter(Mandatory)]
+		[string]$Digest
 	)
 	$tgz = $Path | Split-Path -Leaf
 	$layer = $tgz.Replace('.tar.gz', '')
@@ -100,48 +92,39 @@ function DecompressTarGz {
 		[IO.File]::Delete($Path)
 		throw "removed $Path because it had corrupted data"
 	}
-	$tar = $Path.Replace('.tar.gz', '.tar')
-	$stream = [IO.File]::Open($tar, [IO.FileMode]::OpenOrCreate)
-	$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
+	$fs = [IO.File]::OpenRead($Path)
 	try {
-		$fs = [IO.File]::OpenRead($Path)
+		$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress, $true)
 		try {
-			$gz = [IO.Compression.GZipStream]::new($fs, [IO.Compression.CompressionMode]::Decompress, $true)
-			try {
-				$task = $gz.CopyToAsync($stream)
-				while (-not $task.IsCompleted) {
-					$layer.Substring(0, 12) + ': Decompressing ' + (GetProgress -Current $fs.Position -Total $fs.Length) | WriteConsole
-					Start-Sleep -Milliseconds 125
-				}
-			} finally {
-				$gz.Dispose()
-			}
+			$gz | ExtractTar -Digest $Digest
 		} finally {
-			$fs.Dispose()
+			$gz.Dispose()
 		}
 	} finally {
-		$stream.Dispose()
+		$fs.Dispose()
 	}
-	return $tar
+	return $Path
 }
 
 function ExtractTar {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[string]$Path,
+		[IO.Compression.GZipStream]$Source,
 		[Parameter(Mandatory)]
 		[string]$Digest
 	)
-	$tar = $Path | Split-Path -Leaf
-	$layer = $tar.Replace('.tar', '')
 	$root = ResolvePackagePath -Digest $Digest
 	MakeDirIfNotExist -Path $root | Out-Null
-	$stream = [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate)
-	$stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
+	$buffer = New-Object byte[] 512
+	$maxtasks = (Get-CimInstance -ClassName Win32_Processor).NumberOfLogicalProcessors + 2
+	$fs = [Collections.Generic.List[Object]]::new()
+	$tasks = [Collections.Generic.List[Threading.Tasks.Task]]::new()
 	try {
-		$buffer = New-Object byte[] 512
-		while ($stream.Position -lt $stream.Length) {
-			$stream.Read($buffer, 0, 512) | Out-Null
+		while ($true) {
+			{ $layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Position -Total $Source.BaseStream.Length) + '   ' } | WritePeriodicConsole
+			if ($Source.Read($buffer, 0, 512) -eq 0) {
+				break
+			}
 			$hdr = ParseTarHeader $buffer
 			$size = if ($xhdr.Size) { $xhdr.Size } else { $hdr.Size }
 			$filename = if ($xhdr.Path) { $xhdr.Path } else { $hdr.Filename }
@@ -153,20 +136,37 @@ function ExtractTar {
 				New-Item -Path "\\?\$root\$file" -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
 			}
 			if ($hdr.Type -in [char]103, [char]120) {
-				$xhdr = ParsePaxHeader -Source $stream -Header $hdr
+				$xhdr = ParsePaxHeader -Source $Source -Header $hdr
 			} elseif ($hdr.Type -in [char]0, [char]48, [char]55 -and $filename.StartsWith('Files')) {
-				CopyToFile -Source $stream -FilePath "$root\$file" -Size $size -Digest $layer
+				while ($tasks.Count -ge $maxtasks) {
+					$idx = [Threading.Tasks.Task]::WaitAny($tasks)
+					if ($idx -ge 0) {
+						$fs[$idx].Dispose()
+						$fs.RemoveAt($idx)
+						$tasks.RemoveAt($idx)
+						break
+					}
+				}
+				$f, $t = $Source | CopyToFileAsync -FilePath "$root\$file" -Size $size
+				$fs.Add($f)
+				$tasks.Add($t)
 				$xhdr = $null
 			} else {
-				$stream.Seek($size, [IO.SeekOrigin]::Current) | Out-Null
+				if ($size -gt 0 -and $Source.Read((New-Object byte[] $size), 0, $size) -eq 0) {
+					break
+				}
 				$xhdr = $null
 			}
 			$leftover = $size % 512
-			if ($leftover -gt 0) {
-				$stream.Seek(512 - $leftover, [IO.SeekOrigin]::Current) | Out-Null
+			if ($leftover -gt 0 -and $Source.Read($buffer, 0, 512 - $leftover) -eq 0) {
+				break
 			}
 		}
+		[Threading.Tasks.Task]::WaitAll($tasks.ToArray())
 	} finally {
-		$stream.Dispose()
+		foreach ($f in $fs) {
+			$f.Dispose()
+		}
 	}
+	$layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Length -Total $Source.BaseStream.Length) + '   ' | WriteConsole
 }
