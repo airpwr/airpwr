@@ -35,7 +35,7 @@ function GetManifest {
 
 function GetBlob {
 	param (
-		[Parameter(Mandatory = $true)]
+		[Parameter(Mandatory)]
 		[string]$Ref,
 		[long]$StartByte
 	)
@@ -51,9 +51,7 @@ function GetBlob {
 
 function GetDigestForRef {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Ref
 	)
 	$api = "/v2/$(GetDockerRepo)/manifests/$Ref"
@@ -68,9 +66,7 @@ function GetDigestForRef {
 
 function GetDigest {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
 	return $resp.Headers.GetValues('docker-content-digest')
@@ -78,9 +74,7 @@ function GetDigest {
 
 function GetSize {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
 	$manifest = $Resp | GetJsonResponse

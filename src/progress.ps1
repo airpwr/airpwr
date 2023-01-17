@@ -3,7 +3,7 @@
 
 function GetUnicodeBlock {
 	param (
-		[Parameter(Mandatory = $true)]
+		[Parameter(Mandatory)]
 		[int]$Index
 	)
 	@{
@@ -96,9 +96,7 @@ class Size : IComparable {
 
 function AsSize {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[long]$Bytes
 	)
 	return [Size]::new($Bytes, ($Bytes | AsByteString))

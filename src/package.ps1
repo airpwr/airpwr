@@ -5,9 +5,7 @@
 
 function AsRemotePackage {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$RegistryTag
 	)
 	if ($RegistryTag -match '(.*)-([0-9].+)') {
@@ -21,8 +19,7 @@ function AsRemotePackage {
 
 function AsTag {
 	param (
-		[Parameter(
-			ValueFromPipeline = $true)]
+		[Parameter(ValueFromPipeline)]
 		[string]$Tag
 	)
 	if ($Tag -in 'latest', '', $null) {
@@ -41,9 +38,7 @@ function AsTag {
 
 function AsTagString {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[collections.Hashtable]$Tag
 	)
 	if ($true -eq $Tag.Latest) {
@@ -87,9 +82,7 @@ function GetRemoteTags {
 
 function AsPackage {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Pkg
 	)
 	if ($Pkg -match '^([^:]+)(?::([^:]+))?(?:::?([^:]+))?$') {
@@ -112,9 +105,7 @@ function ResolvePackageRefPath {
 
 function ResolveRemoteRef {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
 	$remote = GetRemoteTags
@@ -383,9 +374,7 @@ class Digest {
 
 function AsDigest {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Digest
 	)
 	return [Digest]::new($Digest)

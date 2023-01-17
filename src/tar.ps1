@@ -117,8 +117,8 @@ function ExtractTar {
 	MakeDirIfNotExist -Path $root | Out-Null
 	$buffer = New-Object byte[] 512
 	$maxtasks = (Get-CimInstance -ClassName Win32_Processor).NumberOfLogicalProcessors + 2
-	$fs = [Collections.Generic.List[Object]]::new()
-	$tasks = [Collections.Generic.List[Threading.Tasks.Task]]::new()
+	$fs = [Collections.ArrayList]::new()
+	$tasks = [Collections.ArrayList]::new()
 	try {
 		while ($true) {
 			{ $layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Position -Total $Source.BaseStream.Length) + '   ' } | WritePeriodicConsole

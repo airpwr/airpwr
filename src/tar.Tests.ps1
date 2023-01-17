@@ -2,7 +2,7 @@ BeforeAll {
 	. $PSCommandPath.Replace('.Tests.ps1', '.ps1')
 }
 
-$script:root = Resolve-Path "$PSScriptRoot\..\test"
+$script:root = (Resolve-Path "$PSScriptRoot\..\test").Path
 $script:tgz = "$root\70f0de6b501a64372ea26d2c12d2eead94f77391bd040c96f2d8b92ffd53fdbe.tar.gz"
 
 Describe "Untargz" {
@@ -19,8 +19,8 @@ Describe "Untargz" {
 	}
 	It "Extracts" {
 		$tgz | ExtractTarGz -Digest '1234567890ab'
-		Get-Content "$(ResolvePackagePath '_')\file.txt" -Raw | Should -Be 'A'
-		$content = Get-Content "\\?\$root\airpower\0123456789abc\nested\Some-Really-Long-Folder-Name----------------------------------------------------------------------------------------------------\Some-Really-Long-Folder-Name-----------------------------------------------------\a.txt" -Raw
-		$content | Should -Be 'xyz'
+		$pkg = ResolvePackagePath '_'
+		Get-Content "$pkg\file.txt" -Raw | Should -Be 'A'
+		[IO.File]::ReadAllText("\\?\$pkg\nested\Some-Really-Long-Folder-Name----------------------------------------------------------------------------------------------------\Some-Really-Long-Folder-Name-----------------------------------------------------\a.txt") | Should -Be 'xyz'
 	}
 }

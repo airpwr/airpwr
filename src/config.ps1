@@ -68,9 +68,7 @@ function MakeDirIfNotExist {
 
 function OutPwrDB {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$PwrDB
 	)
 	MakeDirIfNotExist (GetAirpowerPath)

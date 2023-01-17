@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Net.Http
 
 function HttpRequest {
 	param (
-		[Parameter(Mandatory = $true)]
+		[Parameter(Mandatory)]
 		[string]$URL,
 		[ValidateSet('GET', 'HEAD')]
 		[string]$Method = 'GET',
@@ -25,9 +25,7 @@ function HttpRequest {
 
 function HttpSend {
 	param(
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpRequestMessage]$Req
 	)
 	$ch = [Net.Http.HttpClientHandler]::new()
@@ -50,9 +48,7 @@ function GetJsonResponse {
 
 function GetStringResponse {
 	param (
-		[Parameter(
-			Mandatory = $true,
-			ValueFromPipeline = $true)]
+		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
 	return $Resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()

@@ -36,16 +36,28 @@ function Invoke-Airpower {
 				Invoke-AirpowerList
 			}
 			'load' {
-				Invoke-AirpowerLoad @ArgumentList
+				if ($PSVersionTable.PSVersion.Major -le 5) {
+					Invoke-AirpowerLoad @ArgumentList
+				} else {
+					Invoke-AirpowerLoad $ArgumentList
+				}
 			}
 			'pull' {
-				Invoke-AirpowerPull @ArgumentList
+				if ($PSVersionTable.PSVersion.Major -le 5) {
+					Invoke-AirpowerPull @ArgumentList
+				} else {
+					Invoke-AirpowerPull @ArgumentList
+				}
 			}
 			'prune' {
 				Invoke-AirpowerPrune
 			}
 			{$_ -in 'remove', 'rm'} {
-				Invoke-AirpowerRemove @ArgumentList
+				if ($PSVersionTable.PSVersion.Major -le 5) {
+					Invoke-AirpowerRemove @ArgumentList
+				} else {
+					Invoke-AirpowerRemove @ArgumentList
+				}
 			}
 			'exec' {
 				$params, $remaining = ResolveParameters 'Invoke-AirpowerExec' $ArgumentList
