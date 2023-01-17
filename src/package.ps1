@@ -102,12 +102,20 @@ function AsPackage {
 	throw "failed to parse package: $Pkg"
 }
 
+function ResolvePackageRefPath {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[Collections.Hashtable]$Pkg
+	)
+	return "$(GetAirpowerPath)\ref\$($Pkg.Package)$(if (-not $Pkg.Tag.Latest) { "-$($Pkg.Tag | AsTagString)" })"
+}
+
 function ResolveRemoteRef {
 	param (
 		[Parameter(
 			Mandatory = $true,
 			ValueFromPipeline = $true)]
-		[object]$Pkg
+		[Collections.Hashtable]$Pkg
 	)
 	$remote = GetRemoteTags
 	if (-not $remote.$($Pkg.Package)) {
@@ -230,6 +238,10 @@ function PullPackage {
 		if ($status -eq 'new') {
 			$manifest | SavePackage
 		}
+		$refpath = $Pkg | ResolvePackageRefPath
+		MakeDirIfNotExist (Split-Path $refpath) | Out-Null
+		Remove-Item $refpath -ErrorAction Ignore
+		New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
 		WriteHost "Status: Downloaded newer package for $ref"
 		$db | OutPwrDB
 	}
@@ -303,6 +315,7 @@ function RemovePackage {
 	if ($null -ne $err) {
 		throw $err
 	}
+	Remove-Item ($Pkg | ResolvePackageRefPath) -ErrorAction Ignore
 	WriteHost "Untagged: $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	if ($null -ne $digest) {
 		$content = $digest | ResolvePackagePath
@@ -332,7 +345,6 @@ function UninstallOrhpanedPackages {
 				$db.pkgdb.$pkg.Remove($i.digest)
 				if ($db.pkgdb.$pkg.Count -eq 0) {
 					$empty += $pkg
-
 				}
 			}
 		}
