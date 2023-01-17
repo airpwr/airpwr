@@ -22,9 +22,7 @@ Describe "Untargz" {
 		$tar = $tgz | DecompressTarGz
 		$tar | ExtractTar -Digest '1234567890ab'
 		Get-Content "$(ResolvePackagePath '_')\file.txt" -Raw | Should -Be 'A'
-		Get-ChildItem -File -Recurse -Path "$(ResolvePackagePath '_')\nested" |
-			Select-Object -First 1 |
-			Get-Content -Raw |
-			Should -Be 'XYZ'
+		$content = Get-Content "\\?\$root\airpower\0123456789abc\nested\Some-Really-Long-Folder-Name----------------------------------------------------------------------------------------------------\Some-Really-Long-Folder-Name-----------------------------------------------------\a.txt" -Raw
+		$content | Should -Be 'xyz'
 	}
 }

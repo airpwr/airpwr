@@ -76,10 +76,12 @@ function ConfigurePackage {
 	foreach ($k in $cfg.env.keys) {
 		if ($k -eq 'Path') {
 			if ($AppendPath) {
-				$pre = "$env:Path$(if ($env:Path) { ';' })"
+				$post = "$(if ($env:Path -and -not $env:Path.StartsWith(';')) { ';' })$env:Path"
 			} else {
-				$post = "$(if (-not $env:Path.StartsWith(';')) { ';' })$env:Path"
+				$pre = "$env:Path$(if ($env:Path) { ';' })"
 			}
+		} else {
+			$pre = $post = ''
 		}
 		Set-Item "env:$k" "$pre$($cfg.env.$k)$post"
 	}
@@ -117,6 +119,7 @@ function ExecuteScript {
 	SaveSessionState $GUID
 	try {
 		ClearSessionState $GUID
+		$env:Path = ''
 		foreach ($pkg in $Pkgs) {
 			$pkg.digest = $pkg | ResolvePackageDigest
 			$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"

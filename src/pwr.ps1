@@ -36,16 +36,16 @@ function Invoke-Airpower {
 				Invoke-AirpowerList
 			}
 			'load' {
-				Invoke-AirpowerLoad $ArgumentList
+				Invoke-AirpowerLoad @ArgumentList
 			}
 			'pull' {
-				Invoke-AirpowerPull $ArgumentList
+				Invoke-AirpowerPull @ArgumentList
 			}
 			'prune' {
 				Invoke-AirpowerPrune
 			}
 			{$_ -in 'remove', 'rm'} {
-				Invoke-AirpowerRemove $ArgumentList
+				Invoke-AirpowerRemove @ArgumentList
 			}
 			'exec' {
 				$params, $remaining = ResolveParameters 'Invoke-AirpowerExec' $ArgumentList
