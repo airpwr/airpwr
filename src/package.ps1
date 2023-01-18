@@ -11,13 +11,13 @@ function AsRemotePackage {
 	if ($RegistryTag -match '(.*)-([0-9].+)') {
 		return @{
 			Package = $Matches[1]
-			Tag = $Matches[2] | AsTag
+			Tag = $Matches[2] | AsTagHashtable
 		}
 	}
 	throw "failed to parse registry tag: $RegistryTag"
 }
 
-function AsTag {
+function AsTagHashtable {
 	param (
 		[Parameter(ValueFromPipeline)]
 		[string]$Tag
@@ -88,7 +88,7 @@ function AsPackage {
 	if ($Pkg -match '^([^:]+)(?::([^:]+))?(?:::?([^:]+))?$') {
 		return @{
 			Package = $Matches[1]
-			Tag = $Matches[2] | AsTag
+			Tag = $Matches[2] | AsTagHashtable
 			Config = if ($Matches[3]) { $Matches[3] } else { 'default' }
 		}
 	}
