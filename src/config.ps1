@@ -90,9 +90,9 @@ function GetPwrDB {
 }
 
 function FindConfig {
-	$path = Resolve-Path .
+	$path = (Get-Location).Path
 	while ($path -ne '') {
-		$cfg = "$path\pwr.ps1"
+		$cfg = "$path\Airpower.ps1"
 		if (Test-Path $cfg -PathType Leaf) {
 			return $cfg
 		}
