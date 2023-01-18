@@ -46,7 +46,7 @@ function Invoke-Airpower {
 				if ($PSVersionTable.PSVersion.Major -le 5) {
 					Invoke-AirpowerPull @ArgumentList
 				} else {
-					Invoke-AirpowerPull @ArgumentList
+					Invoke-AirpowerPull $ArgumentList
 				}
 			}
 			'prune' {
@@ -56,7 +56,7 @@ function Invoke-Airpower {
 				if ($PSVersionTable.PSVersion.Major -le 5) {
 					Invoke-AirpowerRemove @ArgumentList
 				} else {
-					Invoke-AirpowerRemove @ArgumentList
+					Invoke-AirpowerRemove $ArgumentList
 				}
 			}
 			'exec' {
