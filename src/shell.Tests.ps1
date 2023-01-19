@@ -50,7 +50,7 @@ Describe 'ExecuteScript' {
 				Package = 'somepkg'
 				Tag = @{ Latest = $true }
 				Config = 'default'
-			} -Script {
+			} -ScriptBlock {
 				SomeFn
 				$yyy = '123'
 				$yyy | Should -Not -BeNullOrEmpty
@@ -71,12 +71,12 @@ Describe 'ExecuteScript' {
 				Package = 'somepkg'
 				Tag = @{ Latest = $true }
 				Config = 'default'
-			} -Script {
+			} -ScriptBlock {
 				ExecuteScript -Pkgs @{
 					Package = 'anotherpkg'
 					Tag = @{ Latest = $true }
 					Config = 'default'
-				} -Script {
+				} -ScriptBlock {
 					SomeFn
 					$env:Path | Should -Be "fizz;$SysPath"
 					$env:foo | Should -Be 'bar'
