@@ -94,11 +94,17 @@ function ResolveParameters {
 	$remaining = [Collections.ArrayList]@()
 	for ($i = 0; $i -lt $ArgumentList.Count; $i++) {
 		if ($fn.parameters.keys -and ($ArgumentList[$i] -match '^-([^:]+)(?::(.*))?$') -and ($Matches[1] -in $fn.parameters.keys)) {
-			if ($Matches[2]) {
-				$params.$($Matches[1]) = $Matches[2]
+			$name = $Matches[1]
+			$value = $Matches[2]
+			if ($value) {
+				$params.$name = $value
 			} else {
-				$params.$($Matches[1]) = $ArgumentList[$i+1]
-				$i++
+				if ($fn.parameters.$name.SwitchParameter -and $null -eq $value) {
+					$params.$name = $true
+				} else {
+					$params.$name = $ArgumentList[$i+1]
+					$i++
+				}
 			}
 		} else {
 			[void]$remaining.Add($ArgumentList[$i])

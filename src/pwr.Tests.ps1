@@ -66,6 +66,12 @@ Describe 'Invoke-Airpower' {
 						)
 						return $Option
 					}
+					function AirpowerTest4 {
+						param (
+							[switch]$Enabled
+						)
+						return $Enabled
+					}
 				}
 			}
 		}
@@ -87,12 +93,28 @@ Describe 'Invoke-Airpower' {
 			$res | Should -Be 7
 		}
 		It 'Function With Param Flag' {
-			$res = & $pwr 'run' 'test2' -X 4 -Y 9
+			$res = & $pwr 'run' 'test2' -X:4 -Y 9
 			$res | Should -Be -5
+		}
+		It 'Function With Param Flag Expression' {
+			$res = & $pwr 'run' 'test2' -X:(5 + 1 - 3) -Y 9
+			$res | Should -Be -6
 		}
 		It 'Function With Param Default' {
 			$res = & $pwr 'run' 'test3' world
 			$res | Should -Be 'world'
+		}
+		It 'Function With Param Switch' {
+			$res = & $pwr 'run' 'test4' -enabled
+			$res | Should -Be $true
+		}
+		It 'Function With Param Switch Explicit' {
+			$res = & $pwr 'run' 'test4' -enabled:$true
+			$res | Should -Be $true
+		}
+		It 'Function With Param Switch Explicit False' {
+			$res = & $pwr 'run' 'test4' -enabled:$false
+			$res | Should -Be $false
 		}
 	}
 	Context 'Run Without Config' {
