@@ -231,7 +231,7 @@ function PullPackage {
 		}
 		$refpath = $Pkg | ResolvePackageRefPath
 		MakeDirIfNotExist (Split-Path $refpath) | Out-Null
-		Remove-Item $refpath -ErrorAction Ignore
+		try { (Get-Item $refpath -ErrorAction Ignore).Delete() } catch { } # Workaround stupidity with Remove-Item on older PowerShell
 		New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
 		WriteHost "Status: Downloaded newer package for $ref"
 		$db | OutPwrDB
@@ -304,7 +304,7 @@ function RemovePackage {
 	if ($null -ne $err) {
 		throw $err
 	}
-	Remove-Item ($Pkg | ResolvePackageRefPath) -ErrorAction Ignore
+	try { (Get-Item ($Pkg | ResolvePackageRefPath) -ErrorAction Ignore).Delete() } catch { } # Workaround stupidity with Remove-Item on older PowerShell
 	WriteHost "Untagged: $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	if ($null -ne $digest) {
 		$content = $digest | ResolvePackagePath
