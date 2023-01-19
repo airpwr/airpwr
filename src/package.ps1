@@ -229,10 +229,10 @@ function PullPackage {
 		if ($status -eq 'new') {
 			$manifest | SavePackage
 		}
-		$refpath = $Pkg | ResolvePackageRefPath
-		MakeDirIfNotExist (Split-Path $refpath) | Out-Null
-		Remove-Item $refpath -ErrorAction Ignore
-		New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
+		$refPath = $Pkg | ResolvePackageRefPath
+		MakeDirIfNotExist (Split-Path $refPath) | Out-Null
+		cmd /c rd $refPath 2> NUL # Alternative for buggy Remove-Item in older PowerShell versions
+		New-Item $refPath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
 		WriteHost "Status: Downloaded newer package for $ref"
 		$db | OutPwrDB
 	}
@@ -304,7 +304,7 @@ function RemovePackage {
 	if ($null -ne $err) {
 		throw $err
 	}
-	Remove-Item ($Pkg | ResolvePackageRefPath) -ErrorAction Ignore
+	cmd /c rd ($Pkg | ResolvePackageRefPath) 2> NUL # Alternative for buggy Remove-Item in older PowerShell versions
 	WriteHost "Untagged: $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	if ($null -ne $digest) {
 		$content = $digest | ResolvePackagePath
