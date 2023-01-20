@@ -197,7 +197,7 @@ function Invoke-AirpowerExec {
 	param (
 		[string[]]$Packages,
 		[Parameter(Mandatory)]
-		[scriptblock]$Script
+		[scriptblock]$ScriptBlock
 	)
 	if (-not $Packages) {
 		$Packages = GetConfigPackages
@@ -209,7 +209,7 @@ function Invoke-AirpowerExec {
 	foreach ($p in $Packages) {
 		$resolved += $p | ResolvePackage
 	}
-	ExecuteScript -Script $Script -Pkgs $resolved
+	ExecuteScript -ScriptBlock $ScriptBlock -Pkgs $resolved
 }
 
 function Invoke-AirpowerRemote {

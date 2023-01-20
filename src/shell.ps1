@@ -111,7 +111,7 @@ function LoadPackage {
 function ExecuteScript {
 	param (
 		[Parameter(Mandatory)]
-		[scriptblock]$Script,
+		[scriptblock]$ScriptBlock,
 		[Parameter(Mandatory)]
 		[Collections.Hashtable[]]$Pkgs
 	)
@@ -129,7 +129,7 @@ function ExecuteScript {
 			$pkg | ConfigurePackage -AppendPath
 		}
 		$env:Path = "$(if ($env:Path) { "$env:Path;" })$env:SYSTEMROOT;$env:SYSTEMROOT\System32;$PSHOME"
-		& $Script
+		& $ScriptBlock
 	} finally {
 		RestoreSessionState $GUID
 	}

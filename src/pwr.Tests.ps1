@@ -162,12 +162,12 @@ Describe 'Invoke-Airpower' {
 			Mock Invoke-AirpowerExec { }
 		}
 		It 'Exec Without Packages' {
-			& $pwr 'exec' -script { 'hi' }
-			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 0 -and $Script.ToString() -eq " 'hi' " }
+			& $pwr 'exec' -ScriptBlock { 'hi' }
+			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 0 -and $ScriptBlock.ToString() -eq " 'hi' " }
 		}
 		It 'Exec With Packages' {
 			& $pwr 'exec' 'a', 'b' { 'hi' }
-			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 2 -and $Script.ToString() -eq " 'hi' " }
+			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 2 -and $ScriptBlock.ToString() -eq " 'hi' " }
 		}
 	}
 }
