@@ -71,8 +71,10 @@ function CopyToFileAsync {
 	$fs = [IO.File]::Open("\\?\$FilePath", [IO.FileMode]::Create)
 	$fs.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
 	try {
-		$Source.Read($buf, 0, $Size) | Out-Null
-		return $fs, $fs.WriteAsync($buf, 0, $Size)
+		if ($Source.Read($buf, 0, $Size) -ne $Size) {
+			throw 'unexpected end of stream'
+		}
+		return $FilePath, $fs, $fs.WriteAsync($buf, 0, $Size)
 	} catch {
 		$fs.Dispose()
 		throw
@@ -116,9 +118,7 @@ function ExtractTar {
 	$root = ResolvePackagePath -Digest $Digest
 	MakeDirIfNotExist -Path $root | Out-Null
 	$buffer = New-Object byte[] 512
-	$maxtasks = (Get-CimInstance -ClassName Win32_Processor).NumberOfLogicalProcessors + 2
-	$fs = [Collections.ArrayList]::new()
-	$tasks = [Collections.ArrayList]::new()
+	$fs = @{ Path = $null; Stream = $null; Task = $null }
 	try {
 		while ($true) {
 			{ $layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Position -Total $Source.BaseStream.Length) + '   ' } | WritePeriodicConsole
@@ -138,18 +138,14 @@ function ExtractTar {
 			if ($hdr.Type -in [char]103, [char]120) {
 				$xhdr = ParsePaxHeader -Source $Source -Header $hdr
 			} elseif ($hdr.Type -in [char]0, [char]48, [char]55 -and $filename.StartsWith('Files')) {
-				while ($tasks.Count -ge $maxtasks) {
-					$idx = [Threading.Tasks.Task]::WaitAny($tasks)
-					if ($idx -ge 0) {
-						$fs[$idx].Dispose()
-						$fs.RemoveAt($idx)
-						$tasks.RemoveAt($idx)
-						break
+				if ($fs.Task) {
+					$fs.Task.Wait()
+					if ($fs.Task.Status -eq [Threading.Tasks.TaskStatus]::Faulted) {
+						throw "failed to write file $($fs.Path)"
 					}
+					$fs.Stream.Dispose()
 				}
-				$f, $t = $Source | CopyToFileAsync -FilePath "$root\$file" -Size $size
-				$fs.Add($f)
-				$tasks.Add($t)
+				$fs.Path, $fs.Stream, $fs.Task = $Source | CopyToFileAsync -FilePath "$root\$file" -Size $size
 				$xhdr = $null
 			} else {
 				if ($size -gt 0 -and $Source.Read((New-Object byte[] $size), 0, $size) -eq 0) {
@@ -162,10 +158,15 @@ function ExtractTar {
 				break
 			}
 		}
-		[Threading.Tasks.Task]::WaitAll($tasks.ToArray())
+		if ($fs.Task) {
+			$fs.Task.Wait()
+			if ($fs.Task.Status -eq [Threading.Tasks.TaskStatus]::Faulted) {
+				throw "failed to write file $($fs.Path)"
+			}
+		}
 	} finally {
-		foreach ($f in $fs) {
-			$f.Dispose()
+		if ($fs.Stream) {
+			$fs.Stream.Dispose()
 		}
 	}
 	$layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Length -Total $Source.BaseStream.Length) + '   ' | WriteConsole
