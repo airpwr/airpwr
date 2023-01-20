@@ -188,7 +188,12 @@ function Invoke-AirpowerRun {
 	$fn = Get-Item "function:Airpower$FnName"
 	if ($fn) {
 		$params, $remaining = ResolveParameters "Airpower$FnName" $ArgumentList
-		& $fn @params @remaining
+		$script = { & $fn @params @remaining }
+		if ($AirpowerPackages) {
+			Invoke-AirpowerExec -Packages $AirpowerPackages -ScriptBlock $script
+		} else {
+			& $script
+		}
 	}
 }
 

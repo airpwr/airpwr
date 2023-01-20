@@ -171,3 +171,26 @@ Describe 'Invoke-Airpower' {
 		}
 	}
 }
+
+Describe 'Invoke-AirpowerRun' {
+	Context 'Config Packages' {
+		BeforeAll {
+			Mock FindConfig {
+				return {
+					$AirpowerPackages = 'go'
+					$AirpowerPackages | Out-Null
+					function AirpowerTest { }
+				}
+			}
+			Mock ResolvePackage {
+				return @{Package = $Ref}
+			}
+			Mock ExecuteScript { 7 }
+		}
+		It 'Defaults' {
+			$v = Invoke-AirpowerRun -FnName 'test' -ScriptBlock { 'hi' }
+			$v | Should -Be 7
+			Should -Invoke -CommandName 'ExecuteScript' -Exactly -Times 1 -ParameterFilter { $Pkgs.Count -eq 1 -and $Pkgs[0].Package -eq 'go' }
+		}
+	}
+}
