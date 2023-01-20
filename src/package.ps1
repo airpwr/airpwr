@@ -231,7 +231,9 @@ function PullPackage {
 		}
 		$refpath = $Pkg | ResolvePackageRefPath
 		MakeDirIfNotExist (Split-Path $refpath) | Out-Null
-		Remove-Item $refpath -ErrorAction Ignore
+		if (Test-Path -Path $refpath -PathType Container) {
+			[IO.Directory]::Delete($refpath)
+		}
 		New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
 		WriteHost "Status: Downloaded newer package for $ref"
 		$db | OutPwrDB
@@ -304,7 +306,6 @@ function RemovePackage {
 	if ($null -ne $err) {
 		throw $err
 	}
-	Remove-Item ($Pkg | ResolvePackageRefPath) -ErrorAction Ignore
 	WriteHost "Untagged: $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	if ($null -ne $digest) {
 		$content = $digest | ResolvePackagePath
@@ -312,6 +313,10 @@ function RemovePackage {
 			[IO.Directory]::Delete($content, $true)
 		}
 		WriteHost "Deleted: $digest"
+	}
+	$refpath = $Pkg | ResolvePackageRefPath
+	if (Test-Path -Path $refpath -PathType Container) {
+		[IO.Directory]::Delete($refpath)
 	}
 	$db | OutPwrDB
 }
