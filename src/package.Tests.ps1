@@ -212,26 +212,34 @@ Describe 'PrunePackages' {
 							'e340857fffc987' = $null
 							'latest' = 'xyz'
 						}
+						'and-another' = @{
+							'ff7d401461e301' = $null
+							'latest' = 'ijk'
+						}
 					}
 					'metadatadb' = @{
 						'abc' = @{RefCount = 1}
 						'xyz' = @{RefCount = 1}
+						'ijk' = @{RefCount = 1}
 						'fde54e65gd4678' = @{RefCount = 0; Size = 3}
-						'e340857fffc987' = @{RefCount = 0; Size = 5}
+						'e340857fffc987' = @{RefCount = 0; RefLostAt = ((Get-Date) - (New-TimeSpan -Days 8)) | Get-Date -Format FileDateTimeUniversal; Size = 5}
+						'ff7d401461e301' = @{RefCount = 0; RefLostAt = ((Get-Date) - (New-TimeSpan -Days 6)) | Get-Date -Format FileDateTimeUniversal; Size = 7}
 					}
 				}
 			}
 		}
 		It 'Prunes' {
-			$db, $pruned = UninstallOrhpanedPackages
+			$db, $pruned = UninstallOrphanedPackages (New-TimeSpan -Days 7)
 			$pruned.Count | Should -Be 2
 			$db.pkgdb.somepkg.Count | Should -Be 1
 			$db.pkgdb.somepkg.latest | Should -Be 'abc'
 			$db.pkgdb.another.Count | Should -Be 1
 			$db.pkgdb.another.latest | Should -Be 'xyz'
-			$db.metadatadb.count | Should -Be 2
+			$db.metadatadb.count | Should -Be 4
 			$db.metadatadb.fde54e65gd4678 | Should -Be $null
 			$db.metadatadb.e340857fffc987 | Should -Be $null
+			$db.metadatadb.ff7d401461e301.refcount | Should -Be 0
+			$db.metadatadb.ff7d401461e301.size | Should -Be 7
 		}
 	}
 	Context 'Last Package' {
@@ -250,7 +258,7 @@ Describe 'PrunePackages' {
 			}
 		}
 		It 'Prunes' {
-			$db, $pruned = UninstallOrhpanedPackages
+			$db, $pruned = UninstallOrphanedPackages
 			$pruned.Count | Should -Be 1
 			$db.pkgdb.somepkg | Should -Be $null
 			$db.metadatadb.fde54e65gd4678 | Should -Be $null

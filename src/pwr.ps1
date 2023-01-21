@@ -50,7 +50,7 @@ function Invoke-Airpower {
 				}
 			}
 			'prune' {
-				Invoke-AirpowerPrune
+				Invoke-AirpowerPrune @ArgumentList
 			}
 			{$_ -in 'remove', 'rm'} {
 				if ($PSVersionTable.PSVersion.Major -le 5) {
@@ -153,8 +153,10 @@ function Invoke-AirpowerRemove {
 
 function Invoke-AirpowerPrune {
 	[CmdletBinding()]
-	param ()
-	PrunePackages
+	param (
+		[Nullable[TimeSpan]]$MinTimeSpan
+	)
+	PrunePackages $MinTimeSpan
 }
 
 function Invoke-AirpowerPull {

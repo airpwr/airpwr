@@ -187,6 +187,9 @@ function InstallPackage { # $db, $status
 		if ($db.metadatadb.$old.refcount -gt 0) {
 			$db.metadatadb.$old.refcount -= 1
 		}
+		if ($db.metadatadb.$old.refcount -eq 0) {
+			$db.metadatadb.$old.RefLostAt = Get-Date -Format FileDateTimeUniversal
+		}
 	}
 	if ($null -eq $db.pkgdb.$name.$tag) {
 		if ($db.metadatadb.$digest) {
@@ -321,12 +324,16 @@ function RemovePackage {
 	$db | OutPwrDB
 }
 
-function UninstallOrhpanedPackages {
+function UninstallOrphanedPackages {
+	param (
+		[Nullable[TimeSpan]]$MinTimeSpan
+	)
 	$db = GetPwrDB
 	$rm = @()
 	foreach ($digest in $db.metadatadb.keys) {
 		$tbl = $db.metadatadb.$digest
-		if ($tbl.refcount -eq 0) {
+		if ($tbl.refcount -eq 0 -and (-not $tbl.RefLostAt -or -not $MinTimeSpan -or
+				[DateTime]::ParseExact($tbl.RefLostAt, 'yyyyMMddTHHmmssffffZ', $null) -lt ((Get-Date) - $MinTimeSpan))) {
 			$tbl.digest = $digest
 			$rm += ,$tbl
 		}
@@ -350,7 +357,10 @@ function UninstallOrhpanedPackages {
 }
 
 function PrunePackages {
-	$db, $pruned = UninstallOrhpanedPackages
+	param (
+		[Nullable[TimeSpan]]$MinTimeSpan
+	)
+	$db, $pruned = UninstallOrphanedPackages $MinTimeSpan
 	$bytes = 0
 	foreach ($i in $pruned) {
 		$content = $i.Digest | ResolvePackagePath

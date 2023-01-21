@@ -170,6 +170,13 @@ Describe 'Invoke-Airpower' {
 			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 2 -and $ScriptBlock.ToString() -eq " 'hi' " }
 		}
 	}
+	Context 'Prune' {
+		It 'Calls UninstallOrphanedPackages with time span' {
+			Mock UninstallOrphanedPackages { }
+			Invoke-Airpower prune (New-TimeSpan -Seconds 3)
+			Should -Invoke -CommandName UninstallOrphanedPackages -Exactly -Times 1 -Scope It -ParameterFilter { $MinTimeSpan -eq (New-TimeSpan -Seconds 3) }
+		}
+	}
 }
 
 Describe 'Invoke-AirpowerRun' {
