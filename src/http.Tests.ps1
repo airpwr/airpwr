@@ -4,7 +4,7 @@ BeforeAll {
 
 Describe "HttpSend" {
 	It "200 OK" {
-		$resp = HttpRequest 'http://google.com' | HttpSend
+		$resp = HttpRequest 'http://github.com' | HttpSend
 		$resp | Should -Not -BeNullOrEmpty -ErrorAction Stop
 		$resp.IsSuccessStatusCode | Should -Be $true
 	}

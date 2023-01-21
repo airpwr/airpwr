@@ -58,27 +58,6 @@ function ParsePaxHeader {
 	return $xhdr
 }
 
-function CopyToFileAsync {
-	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
-		[IO.Compression.GZipStream]$Source,
-		[Parameter(Mandatory)]
-		[string]$FilePath,
-		[Parameter(Mandatory)]
-		[long]$Size
-	)
-	$buf = New-Object byte[] $Size
-	$fs = [IO.File]::Open("\\?\$FilePath", [IO.FileMode]::Create)
-	$fs.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
-	try {
-		$Source.Read($buf, 0, $Size) | Out-Null
-		return $fs, $fs.WriteAsync($buf, 0, $Size)
-	} catch {
-		$fs.Dispose()
-		throw
-	}
-}
-
 function ExtractTarGz {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
@@ -116,9 +95,6 @@ function ExtractTar {
 	$root = ResolvePackagePath -Digest $Digest
 	MakeDirIfNotExist -Path $root | Out-Null
 	$buffer = New-Object byte[] 512
-	$maxtasks = (Get-CimInstance -ClassName Win32_Processor).NumberOfLogicalProcessors + 2
-	$fs = [Collections.ArrayList]::new()
-	$tasks = [Collections.ArrayList]::new()
 	try {
 		while ($true) {
 			{ $layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Position -Total $Source.BaseStream.Length) + '   ' } | WritePeriodicConsole
@@ -138,18 +114,25 @@ function ExtractTar {
 			if ($hdr.Type -in [char]103, [char]120) {
 				$xhdr = ParsePaxHeader -Source $Source -Header $hdr
 			} elseif ($hdr.Type -in [char]0, [char]48, [char]55 -and $filename.StartsWith('Files')) {
-				while ($tasks.Count -ge $maxtasks) {
-					$idx = [Threading.Tasks.Task]::WaitAny($tasks)
-					if ($idx -ge 0) {
-						$fs[$idx].Dispose()
-						$fs.RemoveAt($idx)
-						$tasks.RemoveAt($idx)
-						break
-					}
+				$buf = New-Object byte[] $size
+				if ($Source.Read($buf, 0, $size) -ne $size) {
+					throw 'unexpected end of stream'
 				}
-				$f, $t = $Source | CopyToFileAsync -FilePath "$root\$file" -Size $size
-				$fs.Add($f)
-				$tasks.Add($t)
+				$fs = [IO.File]::Open("\\?\$root\$file", [IO.FileMode]::Create, [IO.FileAccess]::Write)
+				try {
+					if ($write) {
+						$write.Wait()
+						if ($write.IsFaulted) {
+							throw $write.Exception
+						}
+						$writefs.Dispose()
+					}
+				} catch {
+					$fs.Dispose()
+					throw
+				}
+				$writefs = $fs
+				$write = $writefs.WriteAsync($buf, 0, $size)
 				$xhdr = $null
 			} else {
 				if ($size -gt 0 -and $Source.Read((New-Object byte[] $size), 0, $size) -eq 0) {
@@ -162,10 +145,15 @@ function ExtractTar {
 				break
 			}
 		}
-		[Threading.Tasks.Task]::WaitAll($tasks.ToArray())
+		if ($write) {
+			$write.Wait()
+			if ($write.IsFaulted) {
+				throw $write.Exception
+			}
+		}
 	} finally {
-		foreach ($f in $fs) {
-			$f.Dispose()
+		if ($writefs) {
+			$writefs.Dispose()
 		}
 	}
 	$layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Length -Total $Source.BaseStream.Length) + '   ' | WriteConsole
