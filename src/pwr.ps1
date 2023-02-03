@@ -201,8 +201,7 @@ function Invoke-AirpowerExec {
 	[CmdletBinding()]
 	param (
 		[string[]]$Packages,
-		[Parameter(Mandatory)]
-		[scriptblock]$ScriptBlock
+		[scriptblock]$ScriptBlock = { $Host.EnterNestedPrompt() }
 	)
 	if (-not $Packages) {
 		$Packages = GetConfigPackages
