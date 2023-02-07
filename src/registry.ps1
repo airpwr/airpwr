@@ -95,9 +95,9 @@ function SaveBlob {
 	$sha256 = $Digest.Substring('sha256:'.Length)
 	$path = "$(GetPwrTempPath)\$sha256.tar.gz"
 	MakeDirIfNotExist (GetPwrTempPath) | Out-Null
+	$fs = [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate)
+	$fs.Seek(0, [IO.SeekOrigin]::End) | Out-Null
 	try {
-		$fs = [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate)
-		$fs.Seek(0, [IO.SeekOrigin]::End) | Out-Null
 		do {
 			$resp = GetBlob -Ref $Digest -StartByte $fs.Length
 			$size = if ($resp.Content.Headers.ContentRange.HasLength) { $resp.Content.Headers.ContentRange.Length } else { $resp.Content.Headers.ContentLength + $fs.Length }

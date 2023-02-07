@@ -45,7 +45,7 @@ function ParsePaxHeader {
 		[Collections.Hashtable]$Header
 	)
 	$buf = New-Object byte[] $Header.Size
-	$Source.Read($buf, 0, $Header.Size)
+	$Source.ReadExactly($buf, 0, $Header.Size)
 	$content = [Text.Encoding]::UTF8.GetString($buf)
 	$xhdr = @{}
 	foreach ($line in $content -split "`n") {
@@ -98,7 +98,9 @@ function ExtractTar {
 	try {
 		while ($true) {
 			{ $layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Position -Total $Source.BaseStream.Length) + '   ' } | WritePeriodicConsole
-			if ($Source.Read($buffer, 0, 512) -eq 0) {
+			try {
+				$Source.ReadExactly($buffer, 0, 512)
+			} catch [IO.EndOfStreamException] {
 				break
 			}
 			$hdr = ParseTarHeader $buffer
@@ -115,9 +117,7 @@ function ExtractTar {
 				$xhdr = ParsePaxHeader -Source $Source -Header $hdr
 			} elseif ($hdr.Type -in [char]0, [char]48, [char]55 -and $filename.StartsWith('Files')) {
 				$buf = New-Object byte[] $size
-				if ($Source.Read($buf, 0, $size) -ne $size) {
-					throw 'unexpected end of stream'
-				}
+				$Source.ReadExactly($buf, 0, $size)
 				$fs = [IO.File]::Open("\\?\$root\$file", [IO.FileMode]::Create, [IO.FileAccess]::Write)
 				try {
 					if ($write) {
@@ -135,14 +135,14 @@ function ExtractTar {
 				$write = $writefs.WriteAsync($buf, 0, $size)
 				$xhdr = $null
 			} else {
-				if ($size -gt 0 -and $Source.Read((New-Object byte[] $size), 0, $size) -eq 0) {
-					break
+				if ($size -gt 0) {
+					$Source.ReadExactly((New-Object byte[] $size), 0, $size)
 				}
 				$xhdr = $null
 			}
 			$leftover = $size % 512
-			if ($leftover -gt 0 -and $Source.Read($buffer, 0, 512 - $leftover) -eq 0) {
-				break
+			if ($leftover -gt 0) {
+				$Source.ReadExactly($buffer, 0, 512 - $leftover)
 			}
 		}
 		if ($write) {
