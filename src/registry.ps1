@@ -44,7 +44,7 @@ function GetBlob {
 		URL = "https://index.docker.io$api"
 		AuthToken = (GetAuthToken)
 		Accept = 'application/octet-stream'
-		Range = "bytes=$StartByte-"
+		Range = "bytes=$StartByte-$($StartByte + 536870911)" # Request in 512 MB chunks
 	}
 	return HttpRequest @params | HttpSend
 }
@@ -98,13 +98,15 @@ function SaveBlob {
 	try {
 		$fs = [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate)
 		$fs.Seek(0, [IO.SeekOrigin]::End) | Out-Null
-		$resp = GetBlob -Ref $Digest -StartByte $fs.Length
-		$size = $resp.Content.Headers.ContentLength + $fs.Length
-		$task = $resp.Content.CopyToAsync($fs)
-		while (-not $task.IsCompleted) {
-			$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
-			Start-Sleep -Milliseconds 125
-		}
+		do {
+			$resp = GetBlob -Ref $Digest -StartByte $fs.Length
+			$size = if ($resp.Content.Headers.ContentRange.HasLength) { $resp.Content.Headers.ContentRange.Length } else { $resp.Content.Headers.ContentLength + $fs.Length }
+			$task = $resp.Content.CopyToAsync($fs)
+			while (-not $task.IsCompleted) {
+				$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
+				Start-Sleep -Milliseconds 125
+			}
+		} while ($fs.Length -lt $size)
 		$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
 	} finally {
 		$fs.Close()
