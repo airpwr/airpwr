@@ -50,10 +50,10 @@ Out-File "$buildDir\Airpower.psd1" -Encoding ascii -Force -InputObject @"
 	FunctionsToExport = @('Invoke-Airpower')
 	CmdletsToExport = @()
 	VariablesToExport = ''
-	AliasesToExport = @('airpower', 'pwr')
+	AliasesToExport = @('airpower', 'air', 'pwr')
 	PrivateData = @{
 		PSData = @{
-			Tags = @('windows', 'docker', 'package-manager', 'package', 'development', 'powershell', 'container', 'configuration', 'airpower', 'airpwr', 'pwr')
+			Tags = @('windows', 'docker', 'package-manager', 'package', 'development', 'powershell', 'container', 'configuration', 'airpower', 'airpwr')
 			LicenseUri = 'https://github.com/airpwr/airpwr/blob/main/LICENSE.md'
 			ProjectUri = 'https://github.com/airpwr/airpwr'
 		}
