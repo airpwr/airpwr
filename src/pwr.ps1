@@ -134,7 +134,7 @@ function Invoke-AirpowerLoad {
 		$Packages = GetConfigPackages
 	}
 	if (-not $Packages) {
-		Write-Error "no packages provided"
+		Write-Error 'no packages provided'
 	}
 	foreach ($p in $Packages) {
 		$p | ResolvePackage | LoadPackage
@@ -233,7 +233,7 @@ function Invoke-AirpowerRemote {
 function Invoke-AirpowerHelp {
 @"
 
-Usage: pwr COMMAND
+Usage: airpower COMMAND
 
 A package manager and environment to provide consistent tooling for software teams
 
@@ -251,4 +251,5 @@ Commands:
 }
 
 Set-Alias -Name 'airpower' -Value 'Invoke-Airpower' -Scope Global
+Set-Alias -Name 'air' -Value 'Invoke-Airpower' -Scope Global
 Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global

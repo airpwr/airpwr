@@ -2,7 +2,7 @@
 
 A package manager and environment to provide consistent tooling for software teams.
 
-`Airpower`, or `pwr`, manages software packages using container technology and allows users to configure local PowerShell sessions to their need. A standardized project script integrates seamlessly with `pwr` providing common packages and build commands spec which can be kept in source control for consistency across environments.
+Airpower manages software packages using container technology and allows users to configure local PowerShell sessions to their need. Airpower seamlessly integrates common packages with a standardized project script for providing build commands which can be kept in source control for consistency across environments.
 
 # Requirements
 
@@ -10,27 +10,28 @@ Windows operating system with PowerShell version 5.1 or later.
 
 # Installing
 
-In a PowerShell window, run the following command.
+To install Airpower, use the PowerShell command:
 
 ```PowerShell
 Install-Module Airpower -Scope CurrentUser
 ```
 
-See the [PS Gallery](https://www.powershellgallery.com/packages/Airpower) for other installation methods.
+See the [Airpower PS Gallery](https://www.powershellgallery.com/packages/Airpower) for other installation methods.
 
-# pwr
+# Usage
 
-The base command of the Airpower CLI.
+The base command of Airpower is `Invoke-Airpower`. Several aliases are provided for ease-of-use: `airpower`, `air`, and `pwr`.
 
 ## Child commands
+
 Command | Description
---|--
-[`pwr version`](#) | Outputs the version of the module
-[`pwr list`](#) | Outputs a list of installed packages
-[`pwr remote`](#) | Outputs an object of remote packages and versions
-[`pwr pull`](#) | Downloads packages
-[`pwr load`](#) | Loads packages into the PowerShell session
-[`pwr exec`](#) | Runs a user-defined scriptblock in a managed PowerShell session
-[`pwr run`](#) | Runs a user-defined scriptblock provided in a project file
-[`pwr prune`](#) | Deletes unreferenced packages
-[`pwr remove`](#) | Untags and deletes packages
+-- | --
+[`airpower version`](#) | Outputs the version of the module
+[`airpower list`](#) | Outputs a list of installed packages
+[`airpower remote`](#) | Outputs an object of remote packages and versions
+[`airpower pull`](#) | Downloads packages
+[`airpower load`](#) | Loads packages into the PowerShell session
+[`airpower exec`](#) | Runs a user-defined scriptblock in a managed PowerShell session
+[`airpower run`](#) | Runs a user-defined scriptblock provided in a project file
+[`airpower prune`](#) | Deletes unreferenced packages
+[`airpower remove`](#) | Untags and deletes packages
