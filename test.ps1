@@ -29,8 +29,12 @@ foreach ($path in $Paths) {
 $global:PesterPreference = (New-PesterConfiguration -Hashtable @{
 	Run = @{
 		Path = $Paths
+		Exit = $true
 	}
 	CodeCoverage = @{
+		Enabled = $true
+	}
+	TestResult = @{
 		Enabled = $true
 	}
 })
