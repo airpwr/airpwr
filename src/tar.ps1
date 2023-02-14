@@ -45,7 +45,7 @@ function ParsePaxHeader {
 		[Collections.Hashtable]$Header
 	)
 	$buf = New-Object byte[] $Header.Size
-	GzipRead $Source $buf $Header.Size
+	[Util]::GzipRead($Source, $buf, $Header.Size)
 	$content = [Text.Encoding]::UTF8.GetString($buf)
 	$xhdr = @{}
 	foreach ($line in $content -split "`n") {
@@ -85,25 +85,40 @@ function ExtractTarGz {
 	return $Path
 }
 
-function GzipRead {
-	param (
-		[Parameter(Mandatory)]
-		[IO.Compression.GZipStream]$Source,
-		[Parameter(Mandatory)]
-		[byte[]]$Buffer,
-		[Parameter(Mandatory)]
-		[int]$Size
-	)
-	$read = 0
-	while ($read -lt $size) {
-		$n = $Source.Read($buffer, $read, $Size - $read)
-		$read += $n
-		if ($n -eq 0) {
-			break
+class Util {
+	static [int] GzipRead([IO.Compression.GZipStream]$Source, [byte[]]$Buffer, [int]$Size) {
+		$read = 0
+		while ($read -lt $size) {
+			$n = $Source.Read($buffer, $read, $Size - $read)
+			$read += $n
+			if ($n -eq 0) {
+				break
+			}
 		}
+		return $read
 	}
-	return $read
 }
+
+# function GzipRead {
+# 	param (
+# 		[Parameter(Mandatory)]
+# 		[IO.Compression.GZipStream]$Source,
+# 		[Parameter(Mandatory)]
+# 		[AllowEmptyCollection()]
+# 		[byte[]]$Buffer,
+# 		[Parameter(Mandatory)]
+# 		[int]$Size
+# 	)
+# 	$read = 0
+# 	while ($read -lt $size) {
+# 		$n = $Source.Read($buffer, $read, $Size - $read)
+# 		$read += $n
+# 		if ($n -eq 0) {
+# 			break
+# 		}
+# 	}
+# 	return $read
+# }
 
 function ExtractTar {
 	param (
@@ -118,7 +133,7 @@ function ExtractTar {
 	try {
 		while ($true) {
 			{ $layer.Substring(0, 12) + ': Extracting ' + (GetProgress -Current $Source.BaseStream.Position -Total $Source.BaseStream.Length) + '   ' } | WritePeriodicConsole
-			if ((GzipRead $Source $buffer 512) -eq 0) {
+			if ([Util]::GzipRead($Source, $buffer, 512) -eq 0) {
 				break
 			}
 			$hdr = ParseTarHeader $buffer
@@ -135,7 +150,7 @@ function ExtractTar {
 				$xhdr = ParsePaxHeader -Source $Source -Header $hdr
 			} elseif ($hdr.Type -in [char]0, [char]48, [char]55 -and $filename.StartsWith('Files')) {
 				$buf = New-Object byte[] $size
-				GzipRead $Source $buf $size
+				[Util]::GzipRead($Source, $buf, $size)
 				$fs = [IO.File]::Open("\\?\$root\$file", [IO.FileMode]::Create, [IO.FileAccess]::Write)
 				try {
 					if ($write) {
@@ -154,13 +169,13 @@ function ExtractTar {
 				$xhdr = $null
 			} else {
 				if ($size -gt 0) {
-					GzipRead $Source (New-Object byte[] $size) $size
+					[Util]::GzipRead($Source, (New-Object byte[] $size), $size)
 				}
 				$xhdr = $null
 			}
 			$leftover = $size % 512
 			if ($leftover -gt 0) {
-				GzipRead $Source $buffer (512 - $leftover)
+				[Util]::GzipRead($Source, $buffer, (512 - $leftover))
 			}
 		}
 		if ($write) {
