@@ -3,9 +3,7 @@ BeforeAll {
 }
 
 $script:root = (Resolve-Path "$PSScriptRoot\..\test").Path
-$script:tgz = "$root\70f0de6b501a64372ea26d2c12d2eead94f77391bd040c96f2d8b92ffd53fdbe.tar.gz"
-$script:tgz = "$root\e28d6af1b2dbcc7169b25f1316cf867b0de580d15c0610ccf8d10feb421e7d49.tar.gz"
-
+$script:tgz = "$root\a9258b98bfc2c8ed0af1a6e7ee55e604286820c7bf81768ed0da34d5ed87d483.tar.gz"
 
 Describe "Untargz" {
 	BeforeAll {
@@ -23,7 +21,7 @@ Describe "Untargz" {
 		$tgz | ExtractTarGz -Digest '1234567890ab'
 		$pkg = ResolvePackagePath '_'
 		Get-Content "$pkg\file.txt" -Raw | Should -Be 'A'
-		Get-Content "$pkg\empty.txt" -Raw | Should -Be ''
+		Get-Content "$pkg\empty.txt" -Raw | Should -Be $null
 		[IO.File]::ReadAllText("\\?\$pkg\nested\Some-Really-Long-Folder-Name----------------------------------------------------------------------------------------------------\Some-Really-Long-Folder-Name-----------------------------------------------------\a.txt") | Should -Be 'xyz'
 	}
 }

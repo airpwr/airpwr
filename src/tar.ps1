@@ -88,37 +88,18 @@ function ExtractTarGz {
 class Util {
 	static [int] GzipRead([IO.Compression.GZipStream]$Source, [byte[]]$Buffer, [int]$Size) {
 		$read = 0
-		while ($read -lt $size) {
+		while ($true) {
 			$n = $Source.Read($buffer, $read, $Size - $read)
 			$read += $n
 			if ($n -eq 0) {
+				break
+			} elseif ($read -lt $size) {
 				break
 			}
 		}
 		return $read
 	}
 }
-
-# function GzipRead {
-# 	param (
-# 		[Parameter(Mandatory)]
-# 		[IO.Compression.GZipStream]$Source,
-# 		[Parameter(Mandatory)]
-# 		[AllowEmptyCollection()]
-# 		[byte[]]$Buffer,
-# 		[Parameter(Mandatory)]
-# 		[int]$Size
-# 	)
-# 	$read = 0
-# 	while ($read -lt $size) {
-# 		$n = $Source.Read($buffer, $read, $Size - $read)
-# 		$read += $n
-# 		if ($n -eq 0) {
-# 			break
-# 		}
-# 	}
-# 	return $read
-# }
 
 function ExtractTar {
 	param (
@@ -144,7 +125,7 @@ function ExtractTar {
 				throw "suspicious tar filename '$($filename)'"
 			}
 			if ($hdr.Type -eq [char]53 -and $file -ne '') {
-				New-Item -Path "\\?\$root\$file" -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+				New-Item -Path "\\?\$root\$file" -ItemType Directory -Force -ErrorAction Ignore | Out-Null
 			}
 			if ($hdr.Type -in [char]103, [char]120) {
 				$xhdr = ParsePaxHeader -Source $Source -Header $hdr
