@@ -1,19 +1,6 @@
 . $PSScriptRoot\package.ps1
 . $PSScriptRoot\shell.ps1
 
-function Migrate { # TODO REMOVE
-	if (Test-Path "$(GetAirpowerPath)\pwrdb" -PathType Leaf) {
-		Rename-Item -Path "$(GetAirpowerPath)\pwrdb" -NewName (GetPwrDBPath) -Force *>$null
-	}
-	$env = [Environment]::GetEnvironmentVariables([EnvironmentVariableTarget]::User)
-	if ($env.PwrHome -and -not $env.AirpowerPath) {
-		[Environment]::SetEnvironmentVariable('AirpowerPath', $env.PwrHome, [EnvironmentVariableTarget]::User)
-	}
-	if ($env:PwrHome) {
-		$env:AirpowerPath = $env:PwrHome
-	}
-} # TODO REMOVE
-
 function Invoke-Airpower {
 	[CmdletBinding()]
 	param (
@@ -23,7 +10,6 @@ function Invoke-Airpower {
 		[Parameter(ValueFromRemainingArguments)]
 		[object[]]$ArgumentList
 	)
-	Migrate # TODO REMOVE
 	try {
 		switch ($Command) {
 			{$_ -in 'v', 'version'} {
