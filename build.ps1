@@ -23,11 +23,7 @@ function BuildPsm1 {
 }
 
 function GetModuleVersion {
-	if ((git describe --tag) -match '^v([0-9]+\.[0-9]+\.[0-9]+).*$') {
-		$Matches[1]
-	} else {
-		throw "failed to get tag"
-	}
+	"0.6.0.15"
 }
 
 $buildDir = '.\build\Airpower'
