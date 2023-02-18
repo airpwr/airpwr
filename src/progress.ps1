@@ -47,6 +47,18 @@ function WritePeriodicConsole {
 	}
 }
 
+function SetCursorVisible {
+	param (
+		[Parameter(Mandatory)]
+		[bool]$Enable
+	)
+	try {
+		[Console]::CursorVisible = $Enable
+	} catch {
+		Write-Error $_ -ErrorAction Ignore
+	}
+}
+
 function WriteConsole {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]

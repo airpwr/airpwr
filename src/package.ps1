@@ -246,7 +246,7 @@ function SavePackage {
 		[Net.Http.HttpResponseMessage]$Resp
 	)
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-	[Console]::CursorVisible = $false
+	SetCursorVisible $false
 	try {
 		$manifest = $Resp | GetJsonResponse
 		$digest = $Resp | GetDigest
@@ -265,7 +265,7 @@ function SavePackage {
 			[IO.File]::Delete($tmp)
 		}
 	} finally {
-		[Console]::CursorVisible = $true
+		SetCursorVisible $true
 	}
 }
 
