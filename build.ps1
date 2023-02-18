@@ -1,12 +1,12 @@
 function BuildPsm1 {
-	$file = '.\src\pwr.ps1'
+	$file = "$PSScriptRoot\src\pwr.ps1"
 	$script:seen = @($file)
 	$parse = {
 		param (
 			[string]$path
 		)
 		$content = ''
-		foreach ($line in [IO.File]::ReadAllLines($path)) {
+		foreach ($line in (Get-Content $path)) {
 			if ($line -match '^\. \$PSScriptRoot\\(.+)\.ps1$') {
 				$file = ".\src\$($Matches[1]).ps1"
 				if ($file -notin $seen) {

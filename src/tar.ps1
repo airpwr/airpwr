@@ -93,7 +93,7 @@ class Util {
 			$read += $n
 			if ($n -eq 0) {
 				break
-			} elseif ($read -lt $size) {
+			} elseif ($read -ge $size) {
 				break
 			}
 		}
