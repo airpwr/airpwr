@@ -194,3 +194,11 @@ Describe 'Invoke-AirpowerRun' {
 		}
 	}
 }
+
+if ($env:CI) {
+	Describe 'CI' {
+		It 'Pull and Exec' {
+			& $pwr 'exec' 'python' { python --version } -ErrorAction Stop
+		}
+	}
+}
