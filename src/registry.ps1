@@ -94,12 +94,18 @@ function SaveBlob {
 	)
 	$sha256 = $Digest.Substring('sha256:'.Length)
 	$path = "$(GetPwrTempPath)\$sha256.tar.gz"
+	if ((Test-Path $path) -and (Get-FileHash $path).Hash -eq $sha256) {
+		return $path
+	}
 	MakeDirIfNotExist (GetPwrTempPath) | Out-Null
 	$fs = [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate)
 	$fs.Seek(0, [IO.SeekOrigin]::End) | Out-Null
 	try {
 		do {
 			$resp = GetBlob -Ref $Digest -StartByte $fs.Length
+			if (-not $resp.IsSuccessStatusCode) {
+				throw "cannot download blob $($Digest): $($resp.ReasonPhrase)"
+			}
 			$size = if ($resp.Content.Headers.ContentRange.HasLength) { $resp.Content.Headers.ContentRange.Length } else { $resp.Content.Headers.ContentLength + $fs.Length }
 			$task = $resp.Content.CopyToAsync($fs)
 			while (-not $task.IsCompleted) {
