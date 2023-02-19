@@ -219,7 +219,7 @@ function PullPackage {
 	$manifest = $Pkg | ResolveRemoteRef | GetManifest
 	$Pkg.Digest = $manifest | GetDigest
 	$Pkg.Size = $manifest | GetSize
-	WriteHost "$($pkg.Tag | AsTagString): Pulling $($Pkg.Package)"
+	WriteHost "Pulling $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	WriteHost "Digest: $($Pkg.Digest)"
 	$db, $status = $Pkg | InstallPackage
 	$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"
