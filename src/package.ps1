@@ -2,6 +2,7 @@
 . $PSScriptRoot\config.ps1
 . $PSScriptRoot\progress.ps1
 . $PSScriptRoot\log.ps1
+. $PSScriptRoot\db.ps1
 
 function AsRemotePackage {
 	param (
@@ -135,20 +136,19 @@ function ResolveRemoteRef {
 }
 
 function GetLocalPackages {
-	$db = GetPwrDB
 	$pkgs = @()
-	foreach ($pkg in $db.pkgdb.keys) {
-		foreach ($tag in $db.pkgdb.$pkg.keys) {
-			$t = [Tag]::new($tag)
-			$digest = if ($t.None) { $tag } else { $db.pkgdb.$pkg.$tag }
-			$pkgs += [PSCustomObject]@{
-				Package = $pkg
-				Tag = $t
-				Digest = $digest | AsDigest
-				Size = $db.metadatadb.$digest.size | AsSize
-				# Signers
-			}
+	foreach ($lock in [Db]::LockAll('pkgdb')) {
+		$tag = $lock.Key[2]
+		$t = [Tag]::new($tag)
+		$digest = if ($t.None) { $tag } else { $lock.Get() }
+		$pkgs += [PSCustomObject]@{
+			Package = $lock.Key[1]
+			Tag = $t
+			Digest = $digest | AsDigest
+			Size = [Db]::Get(('metadatadb', $digest)).size | AsSize
+			# Signers
 		}
+		$lock.Unlock()
 	}
 	if (-not $pkgs) {
 		$pkgs = ,[PSCustomObject]@{
@@ -166,49 +166,81 @@ function ResolvePackageDigest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$db = GetPwrDB
-	return $db.pkgdb.$($Pkg.Package).$($Pkg.Tag | AsTagString)
+	return [Db]::Get(('pkgdb', $Pkg.Package, $Pkg.Tag | AsTagString))
 }
 
-function InstallPackage { # $db, $status
+function InstallPackage { # $locks, $status
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$db = GetPwrDB
 	$digest = $Pkg.Digest
 	$name = $Pkg.Package
 	$tag = $Pkg.Tag | AsTagString
-	if ($null -ne $db.pkgdb.$name.$tag -and $digest -ne $db.pkgdb.$name.$tag) {
-		$status = 'newer'
-		$old = $db.pkgdb.$name.$tag
-		$db.pkgdb.$name.Remove($tag)
-		$db.pkgdb.$name.$old = $null
-		if ($db.metadatadb.$old.refcount -gt 0) {
-			$db.metadatadb.$old.refcount -= 1
-		}
+	$locks = @()
+	$mLock, $err = [Db]::TryLock(('metadatadb', $digest))
+	if ($err) {
+		throw "package '$digest' is in use by another airpower process"
 	}
-	if ($null -eq $db.pkgdb.$name.$tag) {
-		if ($db.metadatadb.$digest) {
-			if ($db.pkgdb.$name.ContainsKey($digest)) {
-				$db.pkgdb.$name.Remove($digest)
-			}
-			$status = 'tag'
-			$db.metadatadb.$digest.refcount += 1
+	$locks += $mLock
+	$pLock, $err = [Db]::TryLock(('pkgdb', $name, $tag))
+	if ($err) {
+		throw "package '${name}:$tag' is in use by another airpower process"
+	}
+	$locks += $pLock
+	$p = $pLock.Get()
+	$m = $mLock.Get()
+	$status = if ($null -eq $p) {
+		if ($null -eq $m) {
+			'new'
 		} else {
-			$status = 'new'
-			$db.metadatadb.$digest = @{
+			'tag'
+		}
+	} elseif ($digest -ne $p) {
+		'newer'
+	} else {
+		'uptodate'
+	}
+	$pLock.Put($digest)
+	switch ($status) {
+		{$_ -in 'new', 'newer'} {
+			$mLock.Put(@{
 				RefCount = 1
 				Size = $Pkg.Size
+			})
+		}
+		'newer' {
+			$moLock, $err = [Db]::TryLock(('metadatadb', $p))
+			if ($err) {
+				throw "package '$p' is in use by another airpower process"
 			}
+			$locks += $moLock
+			$mo = $moLock.Get()
+			$mo.RefCount -= 1
+			if ($mo.RefCount -eq 0) {
+				$poLock, $err = [Db]::TryLock(('pkgdb', $name, $p))
+				if ($err) {
+					throw "package '$p' is in use by another airpower process"
+				}
+				$locks += $poLock
+				$poLock.Put($null)
+			}
+			$moLock.Put($mo)
 		}
-		$db.pkgdb.$name += @{
-			"$tag" = $digest
+		'tag' {
+			if ([Db]::ContainsKey(('pkgdb', $name, $digest))) {
+				$dLock, $err = [Db]::TryLock(('pkgdb', $name, $digest))
+				if ($err) {
+					throw "package '$digest' is in use by another airpower process"
+				}
+				$locks += $dLock
+				$dLock.Remove()
+			}
+			$m.RefCount += 1
+			$mLock.Put($m)
 		}
-	} else {
-		$status = 'uptodate'
 	}
-	return $db, $status
+	return $locks, $status
 }
 
 function PullPackage {
@@ -221,7 +253,7 @@ function PullPackage {
 	$Pkg.Size = $manifest | GetSize
 	WriteHost "$($pkg.Tag | AsTagString): Pulling $($Pkg.Package)"
 	WriteHost "Digest: $($Pkg.Digest)"
-	$db, $status = $Pkg | InstallPackage
+	$locks, $status = $Pkg | InstallPackage
 	$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"
 	if ($status -eq 'uptodate') {
 		WriteHost "Status: Package is up to date for $ref"
@@ -236,7 +268,7 @@ function PullPackage {
 		}
 		New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
 		WriteHost "Status: Downloaded newer package for $ref"
-		$db | OutPwrDB
+		$locks.Unlock()
 	}
 }
 
@@ -269,32 +301,42 @@ function SavePackage {
 	}
 }
 
-function UninstallPackage { # $db, $digest, $err
+function UninstallPackage { # $locks, $digest, $err
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$db = GetPwrDB
 	$name = $Pkg.Package
-	$key = $Pkg.Tag | AsTagString
-	$table = $db.pkgdb.$name
-	if (-not $db.pkgdb.ContainsKey($name) -or -not $table.ContainsKey($key)) {
-		return $null, $null, "package not installed: ${name}:$key"
+	$tag = $Pkg.Tag | AsTagString
+	$k = 'pkgdb', $name, $tag
+	$locks = @()
+	if (-not [Db]::ContainsKey($k)) {
+		return $null, $null, "package '${name}:$key' not installed"
 	}
-	$digest = $table.$key
-	$table.Remove($key)
-	if ($table.Count -eq 0) {
-		$db.pkgdb.Remove($name)
+	$pLock, $err = [Db]::TryLock($k)
+	if ($err) {
+		throw "package '${name}:$tag' is in use by another airpower process"
 	}
-	if ($db.metadatadb.$digest.refcount -gt 0) {
-		$db.metadatadb.$digest.refcount -= 1
+	$locks += $pLock
+	$p = $pLock.Get()
+	$pLock.Remove()
+	$mLock, $err = [Db]::TryLock(('metadatadb', $p))
+	if ($err) {
+		throw "package '$p' is in use by another airpower process"
 	}
-	if (0 -eq $db.metadatadb.$digest.refcount) {
-		$db.metadatadb.Remove($digest)
+	$locks += $mLock
+	$m = $mLock.Get()
+	if ($m.refcount -gt 0) {
+		$m.refcount -= 1
+	}
+	if ($m.refcount -eq 0) {
+		$mLock.Remove()
+		$digest = $p
 	} else {
+		$mLock.Put($m)
 		$digest = $null
 	}
-	return $db, $digest, $null
+	return $locks, $digest, $null
 }
 
 function RemovePackage {
@@ -302,7 +344,7 @@ function RemovePackage {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$db, $digest, $err = $Pkg | UninstallPackage
+	$locks, $digest, $err = $Pkg | UninstallPackage
 	if ($null -ne $err) {
 		throw $err
 	}
@@ -318,39 +360,36 @@ function RemovePackage {
 	if (Test-Path -Path $refpath -PathType Container) {
 		[IO.Directory]::Delete($refpath)
 	}
-	$db | OutPwrDB
+	$locks.Unlock()
 }
 
 function UninstallOrhpanedPackages {
-	$db = GetPwrDB
-	$rm = @()
-	foreach ($digest in $db.metadatadb.keys) {
-		$tbl = $db.metadatadb.$digest
-		if ($tbl.refcount -eq 0) {
-			$tbl.digest = $digest
-			$rm += ,$tbl
+	$locks = @()
+	$metadata = @()
+	foreach ($lock in [Db]::LockAll('metadatadb')) {
+		$m = $lock.Get()
+		if ($m.refcount -eq 0) {
+			$locks += $lock
+			$m | Add-Member -NotePropertyName 'digest' -NotePropertyValue $lock.Key[1]
+			$metadata += $m
+			$lock.Remove()
+		} else {
+			$lock.Unlock()
 		}
 	}
-	$empty = @()
-	foreach ($i in $rm) {
-		$db.metadatadb.Remove($i.digest)
-		foreach ($pkg in $db.pkgdb.keys) {
-			if ($db.pkgdb.$pkg.ContainsKey($i.digest)) {
-				$db.pkgdb.$pkg.Remove($i.digest)
-				if ($db.pkgdb.$pkg.Count -eq 0) {
-					$empty += $pkg
-				}
-			}
+	foreach ($lock in [Db]::LockAll('pkgdb')) {
+		if ($lock.Key[2] -match '^sha256:') {
+			$locks += $lock
+			$lock.Remove()
+		} else {
+			$lock.Unlock()
 		}
 	}
-	foreach ($name in $empty) {
-		$db.pkgdb.Remove($name)
-	}
-	return $db, $rm
+	return $locks, $metadata
 }
 
 function PrunePackages {
-	$db, $pruned = UninstallOrhpanedPackages
+	$locks, $pruned = UninstallOrhpanedPackages
 	$bytes = 0
 	foreach ($i in $pruned) {
 		$content = $i.Digest | ResolvePackagePath
@@ -362,7 +401,7 @@ function PrunePackages {
 		}
 	}
 	WriteHost "Total reclaimed space: $($bytes | AsByteString)"
-	$db | OutPwrDB
+	$locks.Unlock()
 }
 
 class Digest {

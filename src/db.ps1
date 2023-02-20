@@ -2,21 +2,35 @@
 
 class FileLock {
 	hidden [IO.FileStream]$File
+	hidden [string]$Path
+	hidden [IO.FileAccess]$Access
+	hidden [bool]$Delete
+	[string[]]$Key
 
-	FileLock([string]$Path, [IO.FileAccess]$Access) {
+	FileLock([string]$Path, [IO.FileAccess]$Access, [string[]]$Key) {
+		$this.Key = $Key
+		$this.Access = $Access
+		$this.Path = $Path
 		$this.File = [IO.FileStream]::new($Path, [IO.FileMode]::OpenOrCreate, $Access, [IO.FileShare]::Read)
 	}
 
-	static [FileLock] RLock([string]$Path) {
-		return [FileLock]::new($Path, [IO.FileAccess]::Read)
+	static [FileLock] RLock([string]$Path, [string[]]$Key) {
+		return [FileLock]::new($Path, [IO.FileAccess]::Read, $Key)
 	}
 
-	static [FileLock] Lock([string]$Path) {
-		return [FileLock]::new($Path, [IO.FileAccess]::ReadWrite)
+	static [FileLock] Lock([string]$Path, [string[]]$Key) {
+		return [FileLock]::new($Path, [IO.FileAccess]::ReadWrite, $Key)
 	}
 
 	Unlock() {
 		$this.File.Dispose()
+		if ($this.Delete) {
+			[IO.File]::Delete($this.Path)
+		}
+	}
+
+	Remove() {
+		$this.Delete = $this.Access -eq [IO.FileAccess]::ReadWrite
 	}
 
 	[object] Get() {
@@ -30,33 +44,49 @@ class FileLock {
 		$content = [Db]::Encode($value)
 		$this.File.Write([Text.Encoding]::UTF8.GetBytes($content), 0, [Text.Encoding]::UTF8.GetByteCount($content))
 	}
+
+	[object[]] TryGet() {
+		try {
+			return $this.Get(), $null
+		} catch {
+			return $null, $_
+		}
+	}
+
+	[bool] TryPut([object]$value) {
+		try {
+			$this.Put($value)
+			return $true
+		} catch {
+			return $false
+		}
+	}
 }
 
 class Db {
-	static hidden [string]$Dir
+	static [string]$Dir = (GetPwrDBPath)
 
 	static Db() {
-		try {
-		[Db]::Dir = "$(GetAirpowerPath)\cache"
+		[Db]::Init()
+	}
+
+	static Init() {
 		MakeDirIfNotExist ([Db]::Dir)
-		} catch {
-			Write-Host $_
-		}
+	}
+
+	static Remove([string[]]$key) {
+		[IO.File]::Delete("$([Db]::Dir)\$([Db]::Key($key))")
 	}
 
 	static [object] Get([string[]]$key) {
 		return [Db]::Decode([IO.File]::ReadAllText("$([Db]::Dir)\$([Db]::Key($key))"))
 	}
 
-	static [Result] TryGet([string[]]$key) {
+	static [object[]] TryGet([string[]]$key) {
 		try {
-			return @{
-				Value = [Db]::Get([string[]]$key)
-			}
+			return [Db]::Get($key), $null
 		} catch {
-			return @{
-				Err = $_
-			}
+			return $null, $_
 		}
 	}
 
@@ -74,7 +104,11 @@ class Db {
 	}
 
 	static [string] Encode([object]$value) {
-		return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($value | ConvertTo-Json -Compress -Depth 10)))
+		$json = $value | ConvertTo-Json -Compress -Depth 10
+		if ($null -eq $json) {
+			$json = 'null' # PS 5.1 does not handle null
+		}
+		return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
 	}
 
 	static [object] Decode([string]$value) {
@@ -82,25 +116,50 @@ class Db {
 	}
 
 	static [FileLock] Lock([string[]]$key) {
-		return [FileLock]::Lock("$([Db]::Dir)\$([Db]::Key($key))")
+		return [FileLock]::Lock("$([Db]::Dir)\$([Db]::Key($key))", $key)
+	}
+
+	static [object[]] TryLock([string[]]$key) {
+		try {
+			return [Db]::Lock($key), $null
+		} catch {
+			return $null, $_
+		}
 	}
 
 	static [FileLock] RLock([string[]]$key) {
-		return [FileLock]::RLock("$([Db]::Dir)\$([Db]::Key($key))")
+		return [FileLock]::RLock("$([Db]::Dir)\$([Db]::Key($key))", $key)
+	}
+
+	static [object[]] TryRLock([string[]]$key) {
+		try {
+			return [Db]::RLock($key), $null
+		} catch {
+			return $null, $_
+		}
 	}
 
 	static [string] Key([string[]]$key) {
-		$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($key -join '.'))
+		$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($key -join "`n"))
 		return $b64.Replace('/', '_').Replace('+', '-')
 	}
 
 	static [string[]] DecodeKey([string]$b64) {
-		return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64.Replace('_', '/').Replace('-', '+'))) -split '\.'
+		return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64.Replace('_', '/').Replace('-', '+'))) -split "`n"
 	}
 
 	static [bool] HasPrefix([string]$b64, [string[]]$key) {
 		$s = [Db]::DecodeKey($b64)
-		return $s.StartsWith($key -join '.')
+		for($i=0; $i -lt $key.Length; $i+=1) {
+			if ($key[$i] -ne $s[$i]) {
+				return $false
+			}
+		}
+		return $true
+	}
+
+	static [bool] ContainsKey([string[]]$key) {
+		return [IO.File]::Exists("$([Db]::Dir)\$([Db]::Key($key))")
 	}
 
 	static [Entry[]] GetAll([string[]]$key) {
@@ -109,16 +168,28 @@ class Db {
 			$k = $f.Substring([Db]::Dir.Length+1)
 			if ([Db]::HasPrefix($k, $key)) {
 				$decodedKey = [Db]::DecodeKey($k)
-				$res = [Db]::TryGet($decodedKey)
-				if (-not $res.Err) {
+				$v, $err = [Db]::TryGet($decodedKey)
+				if (-not $err) {
 					$entries += @{
 						Key = $decodedKey
-						Value = $res.Value
+						Value = $v
 					}
 				}
 			}
 		}
 		return $entries
+	}
+
+	static [FileLock[]] LockAll([string[]]$key) {
+		$locks = @()
+		foreach ($f in [IO.Directory]::GetFiles([Db]::Dir)) {
+			$k = $f.Substring([Db]::Dir.Length+1)
+			if ([Db]::HasPrefix($k, $key)) {
+				$decodedKey = [Db]::DecodeKey($k)
+				$locks += [Db]::Lock($decodedKey)
+			}
+		}
+		return $locks
 	}
 }
 
@@ -127,7 +198,3 @@ class Entry {
 	[object]$Value
 }
 
-class Result {
-	[object]$Value
-	[Management.Automation.ErrorRecord]$Err
-}
