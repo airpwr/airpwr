@@ -278,8 +278,8 @@ function PullPackage {
 		}
 		New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
 		WriteHost "Status: Downloaded newer package for $ref"
-		$locks.Unlock()
 	}
+	$locks.Unlock()
 }
 
 function SavePackage {
