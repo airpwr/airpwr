@@ -137,7 +137,11 @@ function ResolveRemoteRef {
 
 function GetLocalPackages {
 	$pkgs = @()
-	foreach ($lock in [Db]::LockAll('pkgdb')) {
+	$locks, $err = [Db]::TryLockAll('pkgdb')
+	if ($err) {
+		throw $err
+	}
+	foreach ($lock in $locks) {
 		$tag = $lock.Key[2]
 		$t = [Tag]::new($tag)
 		$digest = if ($t.None) { $tag } else { $lock.Get() }
@@ -166,7 +170,9 @@ function ResolvePackageDigest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	return [Db]::Get(('pkgdb', $Pkg.Package, $Pkg.Tag | AsTagString))
+	process {
+		[Db]::Get(('pkgdb', $Pkg.Package, $Pkg.Tag | AsTagString))
+	}
 }
 
 function InstallPackage { # $locks, $status
@@ -185,6 +191,7 @@ function InstallPackage { # $locks, $status
 	$locks += $mLock
 	$pLock, $err = [Db]::TryLock(('pkgdb', $name, $tag))
 	if ($err) {
+		$locks.Revert()
 		throw "package '${name}:$tag' is in use by another airpower process"
 	}
 	$locks += $pLock
@@ -212,6 +219,7 @@ function InstallPackage { # $locks, $status
 		'newer' {
 			$moLock, $err = [Db]::TryLock(('metadatadb', $p))
 			if ($err) {
+				$locks.Revert()
 				throw "package '$p' is in use by another airpower process"
 			}
 			$locks += $moLock
@@ -220,6 +228,7 @@ function InstallPackage { # $locks, $status
 			if ($mo.RefCount -eq 0) {
 				$poLock, $err = [Db]::TryLock(('pkgdb', $name, $p))
 				if ($err) {
+					$locks.Revert()
 					throw "package '$p' is in use by another airpower process"
 				}
 				$locks += $poLock
@@ -231,6 +240,7 @@ function InstallPackage { # $locks, $status
 			if ([Db]::ContainsKey(('pkgdb', $name, $digest))) {
 				$dLock, $err = [Db]::TryLock(('pkgdb', $name, $digest))
 				if ($err) {
+					$locks.Revert()
 					throw "package '$digest' is in use by another airpower process"
 				}
 				$locks += $dLock
@@ -311,18 +321,19 @@ function UninstallPackage { # $locks, $digest, $err
 	$k = 'pkgdb', $name, $tag
 	$locks = @()
 	if (-not [Db]::ContainsKey($k)) {
-		return $null, $null, "package '${name}:$key' not installed"
+		return $null, $null, "package '${name}:$tag' not installed"
 	}
 	$pLock, $err = [Db]::TryLock($k)
 	if ($err) {
-		throw "package '${name}:$tag' is in use by another airpower process"
+		return $null, $null, "package '${name}:$tag' is in use by another airpower process"
 	}
 	$locks += $pLock
 	$p = $pLock.Get()
 	$pLock.Remove()
 	$mLock, $err = [Db]::TryLock(('metadatadb', $p))
 	if ($err) {
-		throw "package '$p' is in use by another airpower process"
+		$locks.Revert()
+		$null, $null, "package '$p' is in use by another airpower process"
 	}
 	$locks += $mLock
 	$m = $mLock.Get()
@@ -366,7 +377,11 @@ function RemovePackage {
 function UninstallOrhpanedPackages {
 	$locks = @()
 	$metadata = @()
-	foreach ($lock in [Db]::LockAll('metadatadb')) {
+	$ls, $err = [Db]::TryLockAll('metadatadb')
+	if ($err) {
+		throw $err
+	}
+	foreach ($lock in $ls) {
 		$m = $lock.Get()
 		if ($m.refcount -eq 0) {
 			$locks += $lock
@@ -377,7 +392,14 @@ function UninstallOrhpanedPackages {
 			$lock.Unlock()
 		}
 	}
-	foreach ($lock in [Db]::LockAll('pkgdb')) {
+	$ls, $err = [Db]::TryLockAll('pkgdb')
+	if ($err) {
+		if ($locks) {
+			$locks.Revert()
+		}
+		throw $err
+	}
+	foreach ($lock in $ls) {
 		if ($lock.Key[2] -match '^sha256:') {
 			$locks += $lock
 			$lock.Remove()

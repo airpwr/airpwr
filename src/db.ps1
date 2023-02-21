@@ -2,6 +2,7 @@
 
 class FileLock {
 	hidden [IO.FileStream]$File
+	hidden [IO.MemoryStream]$Buffer
 	hidden [string]$Path
 	hidden [IO.FileAccess]$Access
 	hidden [bool]$Delete
@@ -12,6 +13,9 @@ class FileLock {
 		$this.Access = $Access
 		$this.Path = $Path
 		$this.File = [IO.FileStream]::new($Path, [IO.FileMode]::OpenOrCreate, $Access, [IO.FileShare]::Read)
+		if ($Access -eq [IO.FileAccess]::ReadWrite) {
+			$this.Buffer = [IO.MemoryStream]::new()
+		}
 	}
 
 	static [FileLock] RLock([string]$Path, [string[]]$Key) {
@@ -23,10 +27,20 @@ class FileLock {
 	}
 
 	Unlock() {
+		if ($this.Buffer) {
+			if ($this.Buffer.Length -gt 0) {
+				$this.File.SetLength(0)
+				$this.Buffer.WriteTo($this.File)
+			}
+		}
 		$this.File.Dispose()
 		if ($this.Delete) {
 			[IO.File]::Delete($this.Path)
 		}
+	}
+
+	Revert() {
+		$this.File.Dispose()
 	}
 
 	Remove() {
@@ -40,9 +54,8 @@ class FileLock {
 	}
 
 	Put([object]$Value) {
-		$this.File.SetLength(0)
 		$content = [Db]::Encode($value)
-		$this.File.Write([Text.Encoding]::UTF8.GetBytes($content), 0, [Text.Encoding]::UTF8.GetByteCount($content))
+		$this.Buffer.Write([Text.Encoding]::UTF8.GetBytes($content), 0, [Text.Encoding]::UTF8.GetByteCount($content))
 	}
 
 	[object[]] TryGet() {
@@ -79,7 +92,7 @@ class Db {
 	}
 
 	static [object] Get([string[]]$key) {
-		return [Db]::Decode([IO.File]::ReadAllText("$([Db]::Dir)\$([Db]::Key($key))"))
+ 		return [Db]::Decode([IO.File]::ReadAllText("$([Db]::Dir)\$([Db]::Key($key))"))
 	}
 
 	static [object[]] TryGet([string[]]$key) {
@@ -180,16 +193,23 @@ class Db {
 		return $entries
 	}
 
-	static [FileLock[]] LockAll([string[]]$key) {
+	static [object[]] TryLockAll([string[]]$key) {
 		$locks = @()
 		foreach ($f in [IO.Directory]::GetFiles([Db]::Dir)) {
 			$k = $f.Substring([Db]::Dir.Length+1)
 			if ([Db]::HasPrefix($k, $key)) {
 				$decodedKey = [Db]::DecodeKey($k)
-				$locks += [Db]::Lock($decodedKey)
+				try {
+					$locks += [Db]::Lock($decodedKey)
+				} catch {
+					if ($locks) {
+						$locks.Revert()
+					}
+					return $null, "a package $($decodedKey) is being used by another airpower process"
+				}
 			}
 		}
-		return $locks
+		return $locks, $null
 	}
 }
 
