@@ -170,7 +170,10 @@ function ResolvePackageDigest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	return [Db]::Get(('pkgdb', $Pkg.Package, ($Pkg.Tag | AsTagString)))
+	$k = 'pkgdb', $Pkg.Package, ($Pkg.Tag | AsTagString)
+	if ([Db]::ContainsKey($k)) {
+		return [Db]::Get($k)
+	}
 }
 
 function InstallPackage { # $locks, $status
