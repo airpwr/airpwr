@@ -37,7 +37,7 @@ function GetPwrPullPolicy {
 }
 
 function GetPwrDBPath {
-	"$(GetAirpowerPath)\db"
+	"$(GetAirpowerPath)\cache"
 }
 
 function GetPwrTempPath {
@@ -61,32 +61,7 @@ function MakeDirIfNotExist {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Path
 	)
-	if (-not (Test-Path $Path -PathType Container)) {
-		New-Item -Path $Path -ItemType Directory
-	}
-}
-
-function OutPwrDB {
-	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
-		[Collections.Hashtable]$PwrDB
-	)
-	MakeDirIfNotExist (GetAirpowerPath)
-	$PwrDB |
-		ConvertTo-Json -Compress -Depth 10 |
-		Out-File -FilePath (GetPwrDBPath) -Encoding 'UTF8' -Force
-}
-
-function GetPwrDB {
-	$db = GetPwrDBPath
-	if (Test-Path $db -PathType Leaf) {
-		Get-Content $db -Raw | ConvertFrom-Json | ConvertTo-HashTable
-	} else {
-		@{
-			'pkgdb' = @{}
-			'metadatadb' = @{}
-		}
-	}
+	New-Item -Path $Path -ItemType Directory -ErrorAction Ignore
 }
 
 function FindConfig {
