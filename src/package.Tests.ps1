@@ -250,6 +250,32 @@ Describe 'PrunePackages' {
 	}
 }
 
+Describe 'ResolvePackageDigest' {
+	BeforeEach {
+		[Db]::Init()
+	}
+	AfterEach {
+		[IO.Directory]::Delete("\\?\$root\airpower", $true)
+	}
+	Context 'From DB' {
+		BeforeEach {
+			[Db]::Put(('pkgdb', 'somepkg', '1.2'), 'sha256:fde54e65gd4678')
+			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 1; Size = 3})
+		}
+		It 'Resolves' {
+			$pkg = @{
+				Package = 'somepkg'
+				Tag = @{
+					Major = 1
+					Minor = 2
+				}
+			}
+			$d = $pkg | ResolvePackageDigest
+			$d | Should -Be 'sha256:fde54e65gd4678'
+		}
+	}
+}
+
 Describe 'GetLocalPackages' {
 	BeforeEach {
 		[Db]::Init()
