@@ -197,6 +197,16 @@ Describe 'Invoke-AirpowerRun' {
 
 if ($env:CI) {
 	Describe 'CI' {
+		BeforeAll {
+			$script:root = (Resolve-Path "$PSScriptRoot\..\test").Path
+			$script:AirpowerPath = "$root\airpower"
+		}
+		BeforeEach {
+			[Db]::Init()
+		}
+		AfterEach {
+			[IO.Directory]::Delete("\\?\$root\airpower", $true)
+		}
 		It 'Pull and Exec' {
 			& $pwr 'exec' 'python' { python --version } -ErrorAction Stop
 		}
