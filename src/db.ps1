@@ -57,23 +57,6 @@ class FileLock {
 		$content = [Db]::Encode($value)
 		$this.Buffer.Write([Text.Encoding]::UTF8.GetBytes($content), 0, [Text.Encoding]::UTF8.GetByteCount($content))
 	}
-
-	[object[]] TryGet() {
-		try {
-			return $this.Get(), $null
-		} catch {
-			return $null, $_
-		}
-	}
-
-	[bool] TryPut([object]$value) {
-		try {
-			$this.Put($value)
-			return $true
-		} catch {
-			return $false
-		}
-	}
 }
 
 class Db {

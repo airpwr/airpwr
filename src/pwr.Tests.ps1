@@ -199,6 +199,7 @@ if ($env:CI) {
 	Describe 'CI' {
 		BeforeEach {
 			[Db]::Init()
+			Mock WriteConsole { }
 		}
 		It 'Pull and Exec' {
 			& $pwr 'exec' 'python' { python --version } -ErrorAction Stop
