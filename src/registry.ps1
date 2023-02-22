@@ -72,6 +72,15 @@ function GetDigest {
 	return $resp.Headers.GetValues('docker-content-digest')
 }
 
+function DebugRateLimit {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[Net.Http.HttpResponseMessage]$Resp
+	)
+	Write-Debug "DockerHub RateLimit = $($resp.Headers.GetValues('ratelimit-limit'))"
+	Write-Debug "DockerHub Remaining = $($resp.Headers.GetValues('ratelimit-remaining'))"
+}
+
 function GetSize {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]

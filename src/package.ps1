@@ -259,17 +259,27 @@ function PullPackage {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$manifest = $Pkg | ResolveRemoteRef | GetManifest
-	$Pkg.Digest = $manifest | GetDigest
-	$Pkg.Size = $manifest | GetSize
+	$ref = $Pkg | ResolveRemoteRef
+	$digest = $ref | GetDigestForRef
 	WriteHost "Pulling $($Pkg.Package):$($pkg.Tag | AsTagString)"
-	WriteHost "Digest: $($Pkg.Digest)"
+	WriteHost "Digest: $($digest)"
+	$k = 'metadatadb', $digest
+	if ([Db]::ContainsKey($k)) {
+		$m = [Db]::Get($k)
+		$size = $m.Size
+	} else {
+		$manifest = $ref | GetManifest
+		$manifest | DebugRateLimit
+		$size = $manifest | GetSize
+	}
+	$Pkg.Digest = $digest
+	$Pkg.Size = $size
 	$locks, $status = $Pkg | InstallPackage
 	$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"
 	if ($status -eq 'uptodate') {
 		WriteHost "Status: Package is up to date for $ref"
 	} else {
-		if ($status -eq 'new') {
+		if ($status -in 'new', 'newer') {
 			$manifest | SavePackage
 		}
 		$refpath = $Pkg | ResolvePackageRefPath

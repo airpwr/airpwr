@@ -322,6 +322,7 @@ Describe 'PullPackage' {
 
 			Mock GetManifest { [Net.Http.HttpResponseMessage]::new() }
 			Mock GetDigest { 'sha256:00000000000000000000' }
+			Mock DebugRateLimit {}
 			Mock GetSize {}
 			Mock WriteHost {}
 			Mock InstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}}), 'new' }
