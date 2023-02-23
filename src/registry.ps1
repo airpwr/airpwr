@@ -77,8 +77,12 @@ function DebugRateLimit {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
-	Write-Debug "DockerHub RateLimit = $($resp.Headers.GetValues('ratelimit-limit'))"
-	Write-Debug "DockerHub Remaining = $($resp.Headers.GetValues('ratelimit-remaining'))"
+	if ($resp.Headers.Contains('ratelimit-limit')) {
+		Write-Debug "DockerHub RateLimit = $($resp.Headers.GetValues('ratelimit-limit'))"
+	}
+	if ($resp.Headers.Contains('ratelimit-remaining')) {
+		Write-Debug "DockerHub Remaining = $($resp.Headers.GetValues('ratelimit-remaining'))"
+	}
 }
 
 function GetSize {
