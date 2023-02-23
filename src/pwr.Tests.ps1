@@ -170,6 +170,12 @@ Describe 'Invoke-Airpower' {
 			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 2 -and $ScriptBlock.ToString() -eq " 'hi' " }
 		}
 	}
+	Context 'Exec Local' {
+		It 'Blah' {
+			$v = & $pwr 'exec' 'file:///test/pkg' -ScriptBlock { foo }
+			$v | Should -Be 'bar'
+		}
+	}
 }
 
 Describe 'Invoke-AirpowerRun' {

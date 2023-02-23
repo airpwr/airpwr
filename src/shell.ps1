@@ -58,7 +58,11 @@ function GetPackageDefinition {
 	if (-not $Digest) {
 		return $null
 	}
-	$root = ResolvePackagePath -Digest $Digest
+	if ($digest.StartsWith('file:///')) {
+		$root = $digest.Substring(8)
+	} else {
+		$root = ResolvePackagePath -Digest $Digest
+	}
 	return (Get-Content -Raw "$root\.pwr").Replace('${.}', $root.Replace('\', '\\')) | ConvertFrom-Json | ConvertTo-HashTable
 }
 

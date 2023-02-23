@@ -170,6 +170,9 @@ function ResolvePackageDigest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
+	if ($pkg.digest) {
+		return $pkg.digest
+	}
 	$k = 'pkgdb', $Pkg.Package, ($Pkg.Tag | AsTagString)
 	if ([Db]::ContainsKey($k)) {
 		return [Db]::Get($k)
@@ -531,6 +534,13 @@ function ResolvePackage {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Ref
 	)
+	if ($Ref.StartsWith('file:///')) {
+		return @{
+			Digest = $Ref
+			Tag = @{}
+			Config = 'default'
+		}
+	}
 	$pkg = $Ref | AsPackage
 	$digest = $pkg | ResolvePackageDigest
 	switch (GetPwrPullPolicy) {
