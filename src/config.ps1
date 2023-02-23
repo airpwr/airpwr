@@ -39,6 +39,14 @@ function GetPwrPullPolicy {
 	}
 }
 
+function GetAirpowerAutoprune {
+	if ($AirpowerAutoprune) {
+		$AirpowerAutoprune
+	} elseif ($env:AirpowerAutoprune) {
+		$env:AirpowerAutoprune
+	}
+}
+
 function GetPwrDBPath {
 	"$(GetAirpowerPath)\cache"
 }

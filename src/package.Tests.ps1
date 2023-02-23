@@ -236,11 +236,11 @@ Describe 'PrunePackages' {
 			[Db]::Put(('pkgdb', 'another', 'latest'), 'xyz')
 			[Db]::Put(('metadatadb', 'abc'), @{RefCount = 1})
 			[Db]::Put(('metadatadb', 'xyz'), @{RefCount = 1})
-			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 0; Size = 3})
-			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 0; Size = 5})
+			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 0; Size = 3; Orphaned = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 0; Size = 5; Orphaned = '0001-01-01 00:00:00Z'})
 		}
 		It 'Prunes' {
-			$locks, $metadata = UninstallOrhpanedPackages
+			$locks, $metadata = UninstallOrphanedPackages
 			$locks.Unlock()
 			$metadata.Count | Should -Be 2
 			[Db]::Get(('pkgdb', 'somepkg', 'latest')) | Should -Be 'abc'

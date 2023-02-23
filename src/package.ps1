@@ -387,7 +387,11 @@ function RemovePackage {
 	$locks.Unlock()
 }
 
-function UninstallOrhpanedPackages {
+function UninstallOrphanedPackages {
+	param (
+		[timespan]$Span
+	)
+	$now = [datetime]::UtcNow
 	$locks = @()
 	$metadata = @()
 	$ls, $err = [Db]::TryLockAll('metadatadb')
@@ -395,10 +399,13 @@ function UninstallOrhpanedPackages {
 		throw $err
 	}
 	foreach ($lock in $ls) {
-		$m = $lock.Get()
-		if ($m.refcount -eq 0) {
+		$m = $lock.Get() | ConvertTo-HashTable
+		if ($m.orphaned) {
+			$orphaned = $now - [datetime]::Parse($m.orphaned)
+		}
+		if ($m.refcount -eq 0 -and $orphaned -ge $span) {
 			$locks += $lock
-			$m | Add-Member -NotePropertyName 'digest' -NotePropertyValue $lock.Key[1]
+			$m.digest = $lock.Key[1]
 			$metadata += $m
 			$lock.Remove()
 		} else {
@@ -424,7 +431,14 @@ function UninstallOrhpanedPackages {
 }
 
 function PrunePackages {
-	$locks, $pruned = UninstallOrhpanedPackages
+	param (
+		[switch]$Auto
+	)
+	if ($Auto -and -not (GetAirpowerAutoprune)) {
+		return
+	}
+	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoprune)) } else { [timespan]::new(0) }
+	$locks, $pruned = UninstallOrphanedPackages $span
 	$bytes = 0
 	foreach ($i in $pruned) {
 		$content = $i.Digest | ResolvePackagePath
@@ -435,8 +449,10 @@ function PrunePackages {
 			[IO.Directory]::Delete("\\?\$((Resolve-Path $content).Path)", $true)
 		}
 	}
-	WriteHost "Total reclaimed space: $($bytes | AsByteString)"
-	$locks.Unlock()
+	if ($pruned) {
+		WriteHost "Total reclaimed space: $($bytes | AsByteString)"
+		$locks.Unlock()
+	}
 }
 
 class Digest {

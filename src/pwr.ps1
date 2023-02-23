@@ -99,10 +99,12 @@ function ResolveParameters {
 	return $params, $remaining
 }
 
+$AirpowerModuleVersion = [Version]::new((Import-PowerShellDataFile -Path "$PSScriptRoot\Airpower.psd1").ModuleVersion)
+
 function Invoke-AirpowerVersion {
 	[CmdletBinding()]
 	param ()
-	(Get-Module -Name Airpower).Version
+	$AirpowerModuleVersion
 }
 
 function Invoke-AirpowerList {
@@ -239,3 +241,11 @@ Commands:
 Set-Alias -Name 'airpower' -Value 'Invoke-Airpower' -Scope Global
 Set-Alias -Name 'air' -Value 'Invoke-Airpower' -Scope Global
 Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
+
+& {
+	$remote = [Version]::new((Get-Package -Name Airpower).Version)
+	if ($remote -gt $AirpowerModuleVersion) {
+		WriteHost "$([char]27)[92mA new version of Airpower is available! [v$remote]$([char]27)[0m"
+	}
+	PrunePackages -Auto
+}
