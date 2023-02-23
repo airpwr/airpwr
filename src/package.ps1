@@ -145,22 +145,17 @@ function GetLocalPackages {
 		$tag = $lock.Key[2]
 		$t = [Tag]::new($tag)
 		$digest = if ($t.None) { $tag } else { $lock.Get() }
-		$pkgs += [PSCustomObject]@{
+		$pkgs += [LocalPackage]@{
 			Package = $lock.Key[1]
 			Tag = $t
 			Digest = $digest | AsDigest
 			Size = [Db]::Get(('metadatadb', $digest)).size | AsSize
-			# Signers
+
 		}
 		$lock.Unlock()
 	}
 	if (-not $pkgs) {
-		$pkgs = ,[PSCustomObject]@{
-			Package = $null
-			Tag = $null
-			Digest = $null
-			Size = $null
-		}
+		$pkgs = ,[LocalPackage]@{}
 	}
 	return $pkgs
 }
@@ -200,7 +195,7 @@ function InstallPackage { # $locks, $status
 	}
 	$locks += $pLock
 	$p = $pLock.Get()
-	$m = $mLock.Get()
+	$m = $mLock.Get() | ConvertTo-HashTable
 	$status = if ($null -eq $p) {
 		if ($null -eq $m) {
 			'new'
@@ -227,7 +222,7 @@ function InstallPackage { # $locks, $status
 				throw "package '$p' is in use by another airpower process"
 			}
 			$locks += $moLock
-			$mo = $moLock.Get()
+			$mo = $moLock.Get() | ConvertTo-HashTable
 			$mo.RefCount -= 1
 			if ($mo.RefCount -eq 0) {
 				$poLock, $err = [Db]::TryLock(('pkgdb', $name, $p))
@@ -237,6 +232,7 @@ function InstallPackage { # $locks, $status
 				}
 				$locks += $poLock
 				$poLock.Put($null)
+				$mo.Orphaned = [DateTime]::UtcNow.ToString('u')
 			}
 			$moLock.Put($mo)
 		}
@@ -249,6 +245,9 @@ function InstallPackage { # $locks, $status
 				}
 				$locks += $dLock
 				$dLock.Remove()
+			}
+			if ($m.RefCount -eq 0 -and $m.Orphaned) {
+				$m.Remove('Orphaned')
 			}
 			$m.RefCount += 1
 			$mLock.Put($m)
@@ -564,4 +563,39 @@ function ResolvePackage {
 		}
 	}
 	return $pkg
+}
+
+class Size : IComparable {
+	[long]$Bytes
+	hidden [string]$ByteString
+
+	Size([long]$Bytes, [string]$ByteString) {
+		$this.Bytes = $Bytes
+		$this.ByteString = $ByteString
+	}
+
+	[int] CompareTo([object]$Obj) {
+		return $this.Bytes.CompareTo($Obj.Bytes)
+	}
+
+	[string] ToString() {
+		return $this.ByteString
+	}
+}
+
+function AsSize {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[long]$Bytes
+	)
+	return [Size]::new($Bytes, ($Bytes | AsByteString))
+}
+
+class LocalPackage {
+	[object]$Package
+	[Tag]$Tag
+	[Digest]$Digest
+	[Size]$Size
+	[object]$Orphaned
+	# Signers
 }

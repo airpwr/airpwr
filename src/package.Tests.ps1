@@ -95,6 +95,7 @@ Describe 'InstallPackage' {
 			[Db]::ContainsKey(('pkgdb', 'somepkg', 'fde54e65gd4678')) | Should -Be $true
 			[Db]::Get(('pkgdb', 'somepkg', 'fde54e65gd4678')) | Should -Be $null
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).refcount | Should -Be 0
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).orphaned | Should -Not -BeNullOrEmpty
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).size | Should -Be 293874
 			[Db]::Get(('metadatadb', 'abc123')).refcount | Should -Be 1
 			[Db]::Get(('metadatadb', 'abc123')).size | Should -Be 999123
@@ -138,6 +139,7 @@ Describe 'InstallPackage' {
 			[Db]::Put(('metadatadb', 'fde54e65gd4678'), @{
 				RefCount = 0
 				Size = 293874
+				Orphaned = [DateTime]::UtcNow.ToString('u')
 			})
 		}
 		It 'Installs' {
@@ -158,6 +160,7 @@ Describe 'InstallPackage' {
 			[Db]::ContainsKey(('pkgdb', 'somepkg', 'fde54e65gd4678')) | Should -Be $false
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).refcount | Should -Be 1
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).size | Should -Be 293874
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).orphaned | Should -Be $null
 		}
 	}
 }
