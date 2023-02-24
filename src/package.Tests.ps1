@@ -237,7 +237,7 @@ Describe 'PrunePackages' {
 			[Db]::Put(('metadatadb', 'abc'), @{RefCount = 1})
 			[Db]::Put(('metadatadb', 'xyz'), @{RefCount = 1})
 			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 0; Size = 3; Orphaned = '0001-01-01 00:00:00Z'})
-			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 0; Size = 5; Orphaned = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 0; Size = 5; Orphaned = '2999-01-01 00:00:00Z'})
 		}
 		It 'Prunes' {
 			$locks, $metadata = UninstallOrphanedPackages
@@ -249,6 +249,17 @@ Describe 'PrunePackages' {
 			[Db]::ContainsKey(('pkgdb', 'another', 'sha256:e340857fffc987')) | Should -Be $false
 			[Db]::ContainsKey(('metadatadb', 'sha256:fde54e65gd4678')) | Should -Be $false
 			[Db]::ContainsKey(('metadatadb', 'sha256:e340857fffc987')) | Should -Be $false
+		}
+		It 'Autoprunes' {
+			$locks, $metadata = UninstallOrphanedPackages ([timespan]::new(1, 1, 1))
+			$locks.Unlock()
+			$metadata.Count | Should -Be 1
+			[Db]::Get(('pkgdb', 'somepkg', 'latest')) | Should -Be 'abc'
+			[Db]::Get(('pkgdb', 'another', 'latest')) | Should -Be 'xyz'
+			[Db]::ContainsKey(('pkgdb', 'somepkg', 'sha256:fde54e65gd4678')) | Should -Be $false
+			[Db]::ContainsKey(('pkgdb', 'another', 'sha256:e340857fffc987')) | Should -Be $true
+			[Db]::ContainsKey(('metadatadb', 'sha256:fde54e65gd4678')) | Should -Be $false
+			[Db]::ContainsKey(('metadatadb', 'sha256:e340857fffc987')) | Should -Be $true
 		}
 	}
 }

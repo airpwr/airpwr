@@ -420,7 +420,7 @@ function UninstallOrphanedPackages {
 		throw $err
 	}
 	foreach ($lock in $ls) {
-		if ($lock.Key[2] -match '^sha256:') {
+		if ($lock.Key[2] -match '^sha256:' -and $lock.Key[2] -in $metadata.digest) {
 			$locks += $lock
 			$lock.Remove()
 		} else {
