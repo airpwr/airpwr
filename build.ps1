@@ -44,6 +44,7 @@ Out-File "$buildDir\Airpower.psd1" -Encoding ascii -Force -InputObject @"
 	Copyright = 'U.S. Federal Government (in countries where recognized)'
 	Description = 'A package manager and environment to provide consistent tooling for software teams.'
 	FunctionsToExport = @('Invoke-Airpower')
+	FormatsToProcess = @('Airpower.Format.ps1xml')
 	CmdletsToExport = @()
 	VariablesToExport = ''
 	AliasesToExport = @('airpower', 'air', 'pwr')
@@ -55,4 +56,38 @@ Out-File "$buildDir\Airpower.psd1" -Encoding ascii -Force -InputObject @"
 		}
 	}
 }
+"@
+Out-File "$buildDir\Airpower.Format.ps1xml" -Encoding ascii -Force -InputObject @"
+<?xml version="1.0" encoding="utf-8"?>
+<Configuration>
+	<ViewDefinitions>
+		<View>
+			<Name>Airpower.LocalPackage</Name>
+				<ViewSelectedBy>
+					<TypeName>LocalPackage</TypeName>
+				</ViewSelectedBy>
+				<TableControl>
+					<TableHeaders />
+					<TableRowEntries>
+						<TableRowEntry>
+							<TableColumnItems>
+								<TableColumnItem>
+									<PropertyName>Package</PropertyName>
+								</TableColumnItem>
+								<TableColumnItem>
+									<PropertyName>Tag</PropertyName>
+								</TableColumnItem>
+								<TableColumnItem>
+									<PropertyName>Digest</PropertyName>
+								</TableColumnItem>
+								<TableColumnItem>
+									<PropertyName>Size</PropertyName>
+								</TableColumnItem>
+							</TableColumnItems>
+						</TableRowEntry>
+					</TableRowEntries>
+				</TableControl>
+			</View>
+	</ViewDefinitions>
+</Configuration>
 "@

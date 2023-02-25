@@ -145,22 +145,17 @@ function GetLocalPackages {
 		$tag = $lock.Key[2]
 		$t = [Tag]::new($tag)
 		$digest = if ($t.None) { $tag } else { $lock.Get() }
-		$pkgs += [PSCustomObject]@{
+		$pkgs += [LocalPackage]@{
 			Package = $lock.Key[1]
 			Tag = $t
 			Digest = $digest | AsDigest
 			Size = [Db]::Get(('metadatadb', $digest)).size | AsSize
-			# Signers
+
 		}
 		$lock.Unlock()
 	}
 	if (-not $pkgs) {
-		$pkgs = ,[PSCustomObject]@{
-			Package = $null
-			Tag = $null
-			Digest = $null
-			Size = $null
-		}
+		$pkgs = ,[LocalPackage]@{}
 	}
 	return $pkgs
 }
@@ -200,7 +195,7 @@ function InstallPackage { # $locks, $status
 	}
 	$locks += $pLock
 	$p = $pLock.Get()
-	$m = $mLock.Get()
+	$m = $mLock.Get() | ConvertTo-HashTable
 	$status = if ($null -eq $p) {
 		if ($null -eq $m) {
 			'new'
@@ -227,7 +222,7 @@ function InstallPackage { # $locks, $status
 				throw "package '$p' is in use by another airpower process"
 			}
 			$locks += $moLock
-			$mo = $moLock.Get()
+			$mo = $moLock.Get() | ConvertTo-HashTable
 			$mo.RefCount -= 1
 			if ($mo.RefCount -eq 0) {
 				$poLock, $err = [Db]::TryLock(('pkgdb', $name, $p))
@@ -237,6 +232,7 @@ function InstallPackage { # $locks, $status
 				}
 				$locks += $poLock
 				$poLock.Put($null)
+				$mo.Orphaned = [DateTime]::UtcNow.ToString('u')
 			}
 			$moLock.Put($mo)
 		}
@@ -249,6 +245,9 @@ function InstallPackage { # $locks, $status
 				}
 				$locks += $dLock
 				$dLock.Remove()
+			}
+			if ($m.RefCount -eq 0 -and $m.Orphaned) {
+				$m.Remove('Orphaned')
 			}
 			$m.RefCount += 1
 			$mLock.Put($m)
@@ -388,7 +387,11 @@ function RemovePackage {
 	$locks.Unlock()
 }
 
-function UninstallOrhpanedPackages {
+function UninstallOrphanedPackages {
+	param (
+		[timespan]$Span
+	)
+	$now = [datetime]::UtcNow
 	$locks = @()
 	$metadata = @()
 	$ls, $err = [Db]::TryLockAll('metadatadb')
@@ -396,10 +399,13 @@ function UninstallOrhpanedPackages {
 		throw $err
 	}
 	foreach ($lock in $ls) {
-		$m = $lock.Get()
-		if ($m.refcount -eq 0) {
+		$m = $lock.Get() | ConvertTo-HashTable
+		if ($m.orphaned) {
+			$orphaned = $now - [datetime]::Parse($m.orphaned)
+		}
+		if ($m.refcount -eq 0 -and $orphaned -ge $span) {
 			$locks += $lock
-			$m | Add-Member -NotePropertyName 'digest' -NotePropertyValue $lock.Key[1]
+			$m.digest = $lock.Key[1]
 			$metadata += $m
 			$lock.Remove()
 		} else {
@@ -414,7 +420,7 @@ function UninstallOrhpanedPackages {
 		throw $err
 	}
 	foreach ($lock in $ls) {
-		if ($lock.Key[2] -match '^sha256:') {
+		if ($lock.Key[2] -match '^sha256:' -and $lock.Key[2] -in $metadata.digest) {
 			$locks += $lock
 			$lock.Remove()
 		} else {
@@ -425,7 +431,14 @@ function UninstallOrhpanedPackages {
 }
 
 function PrunePackages {
-	$locks, $pruned = UninstallOrhpanedPackages
+	param (
+		[switch]$Auto
+	)
+	if ($Auto -and -not (GetAirpowerAutoprune)) {
+		return
+	}
+	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoprune)) } else { [timespan]::new(0) }
+	$locks, $pruned = UninstallOrphanedPackages $span
 	$bytes = 0
 	foreach ($i in $pruned) {
 		$content = $i.Digest | ResolvePackagePath
@@ -436,8 +449,10 @@ function PrunePackages {
 			[IO.Directory]::Delete("\\?\$((Resolve-Path $content).Path)", $true)
 		}
 	}
-	WriteHost "Total reclaimed space: $($bytes | AsByteString)"
-	$locks.Unlock()
+	if ($pruned) {
+		WriteHost "Total reclaimed space: $($bytes | AsByteString)"
+		$locks.Unlock()
+	}
 }
 
 class Digest {
@@ -564,4 +579,39 @@ function ResolvePackage {
 		}
 	}
 	return $pkg
+}
+
+class Size : IComparable {
+	[long]$Bytes
+	hidden [string]$ByteString
+
+	Size([long]$Bytes, [string]$ByteString) {
+		$this.Bytes = $Bytes
+		$this.ByteString = $ByteString
+	}
+
+	[int] CompareTo([object]$Obj) {
+		return $this.Bytes.CompareTo($Obj.Bytes)
+	}
+
+	[string] ToString() {
+		return $this.ByteString
+	}
+}
+
+function AsSize {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[long]$Bytes
+	)
+	return [Size]::new($Bytes, ($Bytes | AsByteString))
+}
+
+class LocalPackage {
+	[object]$Package
+	[Tag]$Tag
+	[Digest]$Digest
+	[Size]$Size
+	[object]$Orphaned
+	# Signers
 }

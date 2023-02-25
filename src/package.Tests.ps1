@@ -95,6 +95,7 @@ Describe 'InstallPackage' {
 			[Db]::ContainsKey(('pkgdb', 'somepkg', 'fde54e65gd4678')) | Should -Be $true
 			[Db]::Get(('pkgdb', 'somepkg', 'fde54e65gd4678')) | Should -Be $null
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).refcount | Should -Be 0
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).orphaned | Should -Not -BeNullOrEmpty
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).size | Should -Be 293874
 			[Db]::Get(('metadatadb', 'abc123')).refcount | Should -Be 1
 			[Db]::Get(('metadatadb', 'abc123')).size | Should -Be 999123
@@ -138,6 +139,7 @@ Describe 'InstallPackage' {
 			[Db]::Put(('metadatadb', 'fde54e65gd4678'), @{
 				RefCount = 0
 				Size = 293874
+				Orphaned = [DateTime]::UtcNow.ToString('u')
 			})
 		}
 		It 'Installs' {
@@ -158,6 +160,7 @@ Describe 'InstallPackage' {
 			[Db]::ContainsKey(('pkgdb', 'somepkg', 'fde54e65gd4678')) | Should -Be $false
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).refcount | Should -Be 1
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).size | Should -Be 293874
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).orphaned | Should -Be $null
 		}
 	}
 }
@@ -233,11 +236,11 @@ Describe 'PrunePackages' {
 			[Db]::Put(('pkgdb', 'another', 'latest'), 'xyz')
 			[Db]::Put(('metadatadb', 'abc'), @{RefCount = 1})
 			[Db]::Put(('metadatadb', 'xyz'), @{RefCount = 1})
-			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 0; Size = 3})
-			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 0; Size = 5})
+			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 0; Size = 3; Orphaned = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 0; Size = 5; Orphaned = '2999-01-01 00:00:00Z'})
 		}
 		It 'Prunes' {
-			$locks, $metadata = UninstallOrhpanedPackages
+			$locks, $metadata = UninstallOrphanedPackages
 			$locks.Unlock()
 			$metadata.Count | Should -Be 2
 			[Db]::Get(('pkgdb', 'somepkg', 'latest')) | Should -Be 'abc'
@@ -246,6 +249,30 @@ Describe 'PrunePackages' {
 			[Db]::ContainsKey(('pkgdb', 'another', 'sha256:e340857fffc987')) | Should -Be $false
 			[Db]::ContainsKey(('metadatadb', 'sha256:fde54e65gd4678')) | Should -Be $false
 			[Db]::ContainsKey(('metadatadb', 'sha256:e340857fffc987')) | Should -Be $false
+		}
+		It 'Prunes by timespan' {
+			$locks, $metadata = UninstallOrphanedPackages ([timespan]::new(1, 1, 1))
+			$locks.Unlock()
+			$metadata.Count | Should -Be 1
+			[Db]::Get(('pkgdb', 'somepkg', 'latest')) | Should -Be 'abc'
+			[Db]::Get(('pkgdb', 'another', 'latest')) | Should -Be 'xyz'
+			[Db]::ContainsKey(('pkgdb', 'somepkg', 'sha256:fde54e65gd4678')) | Should -Be $false
+			[Db]::ContainsKey(('pkgdb', 'another', 'sha256:e340857fffc987')) | Should -Be $true
+			[Db]::ContainsKey(('metadatadb', 'sha256:fde54e65gd4678')) | Should -Be $false
+			[Db]::ContainsKey(('metadatadb', 'sha256:e340857fffc987')) | Should -Be $true
+		}
+	}
+	Context 'Auto' {
+		BeforeAll {
+			Mock UninstallOrphanedPackages { @(), @() }
+			$script:AirpowerAutoprune = "4.11:22:33"
+		}
+		AfterAll {
+			$script:AirpowerAutoprune = $null
+		}
+		It 'Prunes' {
+			PrunePackages -Auto
+			Should -Invoke -CommandName 'UninstallOrphanedPackages' -Exactly -Times 1 -ParameterFilter { $span -eq [timespan]::new(4, 11, 22, 33) }
 		}
 	}
 }

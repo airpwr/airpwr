@@ -87,29 +87,3 @@ function AsByteString {
 	}
 	return "{0:0.$(if ($FixDecimals) { '00' } else { '##' })} {1}B" -f $n, $r[[Math]::Min(9, $p)]
 }
-
-class Size : IComparable {
-	[long]$Bytes
-	hidden [string]$ByteString
-
-	Size([long]$Bytes, [string]$ByteString) {
-		$this.Bytes = $Bytes
-		$this.ByteString = $ByteString
-	}
-
-	[int] CompareTo([object]$Obj) {
-		return $this.Bytes.CompareTo($Obj.Bytes)
-	}
-
-	[string] ToString() {
-		return $this.ByteString
-	}
-}
-
-function AsSize {
-	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
-		[long]$Bytes
-	)
-	return [Size]::new($Bytes, ($Bytes | AsByteString))
-}

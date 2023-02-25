@@ -3,6 +3,9 @@ function ConvertTo-HashTable {
 		[Parameter(ValueFromPipeline)]
 		[PSCustomObject]$Object
 	)
+	if ($null -eq $Object) {
+		return
+	}
 	$Table = @{}
 	$Object.PSObject.Properties | ForEach-Object {
 		$V = $_.Value
@@ -33,6 +36,14 @@ function GetPwrPullPolicy {
 		$env:PwrPullPolicy
 	} else {
 		"IfNotPresent"
+	}
+}
+
+function GetAirpowerAutoprune {
+	if ($AirpowerAutoprune) {
+		$AirpowerAutoprune
+	} elseif ($env:AirpowerAutoprune) {
+		$env:AirpowerAutoprune
 	}
 }
 

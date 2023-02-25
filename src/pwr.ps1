@@ -239,3 +239,15 @@ Commands:
 Set-Alias -Name 'airpower' -Value 'Invoke-Airpower' -Scope Global
 Set-Alias -Name 'air' -Value 'Invoke-Airpower' -Scope Global
 Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
+
+& {
+	if ('Airpower.psm1' -eq (Split-Path $MyInvocation.ScriptName -Leaf)) {
+		# Invoked as a module
+		$local = [Version]::new((Import-PowerShellDataFile -Path "$PSScriptRoot\Airpower.psd1").ModuleVersion)
+		$remote = [Version]::new((Get-Package -Name Airpower).Version)
+		if ($remote -gt $local) {
+			WriteHost "$([char]27)[92mA new version of Airpower is available! [v$remote]$([char]27)[0m"
+		}
+		PrunePackages -Auto
+	}
+}
