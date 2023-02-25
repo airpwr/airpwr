@@ -250,7 +250,7 @@ Describe 'PrunePackages' {
 			[Db]::ContainsKey(('metadatadb', 'sha256:fde54e65gd4678')) | Should -Be $false
 			[Db]::ContainsKey(('metadatadb', 'sha256:e340857fffc987')) | Should -Be $false
 		}
-		It 'Autoprunes' {
+		It 'Prunes by timespan' {
 			$locks, $metadata = UninstallOrphanedPackages ([timespan]::new(1, 1, 1))
 			$locks.Unlock()
 			$metadata.Count | Should -Be 1
@@ -260,6 +260,19 @@ Describe 'PrunePackages' {
 			[Db]::ContainsKey(('pkgdb', 'another', 'sha256:e340857fffc987')) | Should -Be $true
 			[Db]::ContainsKey(('metadatadb', 'sha256:fde54e65gd4678')) | Should -Be $false
 			[Db]::ContainsKey(('metadatadb', 'sha256:e340857fffc987')) | Should -Be $true
+		}
+	}
+	Context 'Auto' {
+		BeforeAll {
+			Mock UninstallOrphanedPackages { @(), @() }
+			$script:AirpowerAutoprune = "4.11:22:33"
+		}
+		AfterAll {
+			$script:AirpowerAutoprune = $null
+		}
+		It 'Prunes' {
+			PrunePackages -Auto
+			Should -Invoke -CommandName 'UninstallOrphanedPackages' -Exactly -Times 1 -ParameterFilter { $span -eq [timespan]::new(4, 11, 22, 33) }
 		}
 	}
 }
