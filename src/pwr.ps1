@@ -243,10 +243,17 @@ Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
 & {
 	if ('Airpower.psm1' -eq (Split-Path $MyInvocation.ScriptName -Leaf)) {
 		# Invoked as a module
-		$local = [Version]::new((Import-PowerShellDataFile -Path "$PSScriptRoot\Airpower.psd1").ModuleVersion)
-		$remote = [Version]::new((Get-Package -Name Airpower).Version)
-		if ($remote -gt $local) {
-			WriteHost "$([char]27)[92mA new version of Airpower is available! [v$remote]$([char]27)[0m"
+		$params = @{
+			URL = "https://www.powershellgallery.com/packages/airpower"
+			Method = 'HEAD'
+		}
+		$resp = HttpRequest @params | HttpSend -NoRedirect
+		if ($resp.Headers.Location) {
+			$remote = [Version]::new($resp.Headers.Location.OriginalString.Substring('/packages/airpower/'.Length))
+			$local = [Version]::new((Import-PowerShellDataFile -Path "$PSScriptRoot\Airpower.psd1").ModuleVersion)
+			if ($remote -gt $local) {
+				WriteHost "$([char]27)[92mA new version of Airpower is available! [v$remote]$([char]27)[0m"
+			}
 		}
 		PrunePackages -Auto
 	}

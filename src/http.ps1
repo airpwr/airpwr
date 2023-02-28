@@ -26,9 +26,13 @@ function HttpRequest {
 function HttpSend {
 	param(
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[Net.Http.HttpRequestMessage]$Req
+		[Net.Http.HttpRequestMessage]$Req,
+		[switch]$NoRedirect
 	)
 	$ch = [Net.Http.HttpClientHandler]::new()
+	if ($NoRedirect) {
+		$ch.AllowAutoRedirect = $false
+	}
 	$ch.UseProxy = $false
 	$cli = [Net.Http.HttpClient]::new($ch)
 	$resp = $cli.SendAsync($Req, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
