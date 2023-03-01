@@ -45,7 +45,7 @@ function ParsePaxHeader {
 		[Collections.Hashtable]$Header
 	)
 	$buf = New-Object byte[] $Header.Size
-	[Util]::GzipRead($Source, $buf, $Header.Size)
+	[void]([Util]::GzipRead($Source, $buf, $Header.Size))
 	$content = [Text.Encoding]::UTF8.GetString($buf)
 	$xhdr = @{}
 	foreach ($line in $content -split "`n") {
@@ -131,7 +131,7 @@ function ExtractTar {
 				$xhdr = ParsePaxHeader -Source $Source -Header $hdr
 			} elseif ($hdr.Type -in [char]0, [char]48, [char]55 -and $filename.StartsWith('Files')) {
 				$buf = New-Object byte[] $size
-				[Util]::GzipRead($Source, $buf, $size)
+				[void]([Util]::GzipRead($Source, $buf, $size))
 				$fs = [IO.File]::Open("\\?\$root\$file", [IO.FileMode]::Create, [IO.FileAccess]::Write)
 				try {
 					if ($write) {
@@ -150,13 +150,13 @@ function ExtractTar {
 				$xhdr = $null
 			} else {
 				if ($size -gt 0) {
-					[Util]::GzipRead($Source, (New-Object byte[] $size), $size)
+					[void]([Util]::GzipRead($Source, (New-Object byte[] $size), $size))
 				}
 				$xhdr = $null
 			}
 			$leftover = $size % 512
 			if ($leftover -gt 0) {
-				[Util]::GzipRead($Source, $buffer, (512 - $leftover))
+				[void]([Util]::GzipRead($Source, $buffer, (512 - $leftover)))
 			}
 		}
 		if ($write) {
