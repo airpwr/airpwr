@@ -16,6 +16,14 @@ To install Airpower, use the PowerShell command:
 Install-Module Airpower -Scope CurrentUser
 ```
 
+Or, to avoid user prompts (such as continuous integration environments), use the PowerShell commands:
+
+```PowerShell
+Install-PackageProvider -Name NuGet -Force
+Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+Install-Module Airpower -Scope CurrentUser
+```
+
 See the [Airpower PS Gallery](https://www.powershellgallery.com/packages/Airpower) for other installation methods.
 
 # Usage
