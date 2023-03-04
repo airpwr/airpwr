@@ -29,11 +29,11 @@ function GetAirpowerPath {
 	}
 }
 
-function GetPwrPullPolicy {
-	if ($PwrPullPolicy) {
-		$PwrPullPolicy
-	} elseif ($env:PwrPullPolicy) {
-		$env:PwrPullPolicy
+function GetAirpowerPullPolicy {
+	if ($AirpowerPullPolicy) {
+		$AirpowerPullPolicy
+	} elseif ($env:AirpowerPullPolicy) {
+		$env:AirpowerPullPolicy
 	} else {
 		"IfNotPresent"
 	}

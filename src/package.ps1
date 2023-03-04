@@ -558,7 +558,7 @@ function ResolvePackage {
 	}
 	$pkg = $Ref | AsPackage
 	$digest = $pkg | ResolvePackageDigest
-	switch (GetPwrPullPolicy) {
+	switch (GetAirpowerPullPolicy) {
 		'IfNotPresent' {
 			if (-not $digest) {
 				$pkg | PullPackage | Out-Null
@@ -575,7 +575,7 @@ function ResolvePackage {
 			$pkg.digest = $pkg | ResolvePackageDigest
 		}
 		default {
-			throw "invalid PwrPullPolicy '$(GetPwrPullPolicy)'"
+			throw "invalid AirpowerPullPolicy '$(GetAirpowerPullPolicy)'"
 		}
 	}
 	return $pkg
