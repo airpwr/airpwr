@@ -87,3 +87,53 @@ Describe 'ExecuteScript' {
 		}
 	}
 }
+
+Describe 'ConfigurePackage' {
+	BeforeAll {
+		$script:_Path = $env:Path
+		$env:Path = 'PATH'
+		Mock Set-Item {}
+		Mock GetPackageDefinition {
+			@{
+				Env = @{
+					'path' = 'zzz'
+				}
+			}
+		}
+	}
+	AfterAll {
+		$env:Path = $_Path
+	}
+	It 'Appends' {
+		$pkg = @{
+			Config = 'default'
+			Package = 'foo'
+			Tag = @{ Latest = $true }
+			Digest = 'sha256'
+		}
+		$pkg | ConfigurePackage
+		Should -Invoke Set-Item -Times 1 -Exactly -ParameterFilter {
+			$script:p = $Path
+			$script:v = $Value
+			$true
+		}
+		$p | Should -Be 'env:path'
+		$v | Should -Be 'zzz;PATH'
+	}
+	It 'Prepends' {
+		$pkg = @{
+			Config = 'default'
+			Package = 'foo'
+			Tag = @{ Latest = $true }
+			Digest = 'sha256'
+		}
+		$pkg | ConfigurePackage -AppendPath
+		Should -Invoke Set-Item -Times 1 -Exactly -ParameterFilter {
+			$script:p = $Path
+			$script:v = $Value
+			$true
+		}
+		$p | Should -Be 'env:path'
+		$v | Should -Be 'PATH;zzz'
+	}
+}

@@ -80,9 +80,9 @@ function ConfigurePackage {
 	foreach ($k in $cfg.env.keys) {
 		if ($k -eq 'Path') {
 			if ($AppendPath) {
-				$post = "$(if ($env:Path -and -not $env:Path.StartsWith(';')) { ';' })$env:Path"
+				$pre = "$env:Path$(if ($env:Path -and -not $env:Path.EndsWith(';')) { ';' })"
 			} else {
-				$pre = "$env:Path$(if ($env:Path) { ';' })"
+				$post = "$(if ($env:Path) { ';' })$env:Path"
 			}
 		} else {
 			$pre = $post = ''
