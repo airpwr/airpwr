@@ -47,6 +47,10 @@ function Invoke-Airpower {
 			}
 			'exec' {
 				$params, $remaining = ResolveParameters 'Invoke-AirpowerExec' $ArgumentList
+				if ((-not $params.ScriptBlock) -and ($null -ne $remaining) -and ($remaining[-1] -isnot [scriptblock])) {
+					$params.Packages += $remaining
+					$remaining = @()
+				}
 				Invoke-AirpowerExec @params @remaining
 			}
 			'run' {

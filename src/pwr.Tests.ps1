@@ -169,6 +169,10 @@ Describe 'Invoke-Airpower' {
 			& $pwr 'exec' 'a', 'b' { 'hi' }
 			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 2 -and $ScriptBlock.ToString() -eq " 'hi' " }
 		}
+		It 'Exec With Default Script' {
+			& $pwr 'exec' 'a', 'b'
+			Should -Invoke -CommandName 'Invoke-AirpowerExec' -Exactly -Times 1 -ParameterFilter { $Packages.Count -eq 2 }
+		}
 	}
 	Context 'Exec Local' {
 		It 'Blah' {
