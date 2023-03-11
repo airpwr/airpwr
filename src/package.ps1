@@ -145,12 +145,13 @@ function GetLocalPackages {
 		$tag = $lock.Key[2]
 		$t = [Tag]::new($tag)
 		$digest = if ($t.None) { $tag } else { $lock.Get() }
+		$m = [Db]::Get(('metadatadb', $digest))
 		$pkgs += [LocalPackage]@{
 			Package = $lock.Key[1]
 			Tag = $t
 			Digest = $digest | AsDigest
-			Size = [Db]::Get(('metadatadb', $digest)).size | AsSize
-
+			Size = $m.size | AsSize
+			Orphaned = if ($m.orphaned) { [datetime]::Parse($m.orphaned) }
 		}
 		$lock.Unlock()
 	}
