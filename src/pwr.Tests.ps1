@@ -175,9 +175,13 @@ Describe 'Invoke-Airpower' {
 		}
 	}
 	Context 'Exec Local' {
-		It 'Blah' {
+		It 'Default Config' {
 			$v = & $pwr 'exec' 'file:///test/pkg' -ScriptBlock { foo }
 			$v | Should -Be 'bar'
+		}
+		It 'With Config' {
+			$v = & $pwr 'exec' 'file:///test/pkg < somecfg' -ScriptBlock { buzz }
+			$v | Should -Be 'bazz'
 		}
 	}
 }

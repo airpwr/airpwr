@@ -551,10 +551,12 @@ function ResolvePackage {
 		[string]$Ref
 	)
 	if ($Ref.StartsWith('file:///')) {
+		$i = $ref.IndexOf('<')
+		$cfg = if ($i -eq -1 -and $ref.Length -gt $i + 1) { 'default' } else { $ref.Substring($i+1).Trim() }
 		return @{
 			Digest = $Ref
 			Tag = @{}
-			Config = 'default'
+			Config = $cfg
 		}
 	}
 	$pkg = $Ref | AsPackage

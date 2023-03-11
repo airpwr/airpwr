@@ -60,6 +60,10 @@ function GetPackageDefinition {
 	}
 	if ($digest.StartsWith('file:///')) {
 		$root = $digest.Substring(8)
+		$i = $root.IndexOf('<')
+		if ($i -ne -1) {
+			$root = $root.Substring(0, $i).Trim()
+		}
 	} else {
 		$root = ResolvePackagePath -Digest $Digest
 	}
