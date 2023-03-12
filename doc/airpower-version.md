@@ -4,7 +4,7 @@ Outputs the in-use version of the module.
 
 ## Usage
 
-	airpower [version | v]
+	airpower <version | v>
 
 ## Examples
 

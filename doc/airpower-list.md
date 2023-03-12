@@ -2,7 +2,7 @@
 
 Outputs a list of installed packages.
 
-When a displayed `Package` has an empty `Tag`, it is considered *orphaned* and eligible to be pruned via the ` prune` command.
+When a displayed package has an empty tag, it is considered *orphaned* and eligible to be pruned via the `prune` command.
 
 ## Usage
 

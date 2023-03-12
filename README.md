@@ -37,10 +37,11 @@ Command | Description
 -- | --
 [`version`](./doc/airpower-version.md) | Outputs the version of the module
 [`list`](./doc/airpower-list.md) | Outputs a list of installed packages
-[`remote`](#) | Outputs an object of remote packages and versions
-[`pull`](#) | Downloads packages
-[`load`](#) | Loads packages into the PowerShell session
+[`remote`](./doc/airpower-remote.md) | Outputs an object of remote packages and versions
+[`pull`](./doc/airpower-pull.md) | Downloads packages
+[`load`](./doc/airpower-load.md) | Loads packages into the PowerShell session
 [`exec`](#) | Runs a user-defined scriptblock in a managed PowerShell session
 [`run`](#) | Runs a user-defined scriptblock provided in a project file
-[`prune`](#) | Deletes unreferenced packages
-[`remove`](#) | Untags and deletes packages
+[`prune`](./doc/airpower-prune.md) | Deletes unreferenced packages
+[`remove`](./doc/airpower-remove.md) | Untags and deletes packages
+[`help`](./doc/airpower-help.md) | Outputs usage for this command

@@ -1,4 +1,4 @@
-# pwr remote
+# pwr exec
 
 ## Usage
 
