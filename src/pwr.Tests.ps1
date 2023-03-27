@@ -244,7 +244,7 @@ Describe 'CheckForUpdates' {
 			}
 			Mock HttpSend {
 				$resp = [Net.Http.HttpResponseMessage]::new()
-				$resp.Headers.Add('Location', [Uri]'/packages/airpower/1.2.4')
+				$resp.Headers.Add('Location', '/packages/airpower/1.2.4')
 				return $resp
 			}
 			Mock WriteHost { }
