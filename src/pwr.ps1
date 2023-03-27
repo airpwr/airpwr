@@ -241,13 +241,8 @@ Commands:
 "@
 }
 
-Set-Alias -Name 'airpower' -Value 'Invoke-Airpower' -Scope Global
-Set-Alias -Name 'air' -Value 'Invoke-Airpower' -Scope Global
-Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
-
-& {
-	if ('Airpower.psm1' -eq (Split-Path $MyInvocation.ScriptName -Leaf)) {
-		# Invoked as a module
+function CheckForUpdates {
+	try {
 		$params = @{
 			URL = "https://www.powershellgallery.com/packages/airpower"
 			Method = 'HEAD'
@@ -260,6 +255,19 @@ Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
 				WriteHost "$([char]27)[92mA new version of Airpower is available! [v$remote]$([char]27)[0m"
 			}
 		}
+	} catch {
+		Write-Debug "failed to check for updates: $_"
+	}
+}
+
+Set-Alias -Name 'airpower' -Value 'Invoke-Airpower' -Scope Global
+Set-Alias -Name 'air' -Value 'Invoke-Airpower' -Scope Global
+Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
+
+& {
+	if ('Airpower.psm1' -eq (Split-Path $MyInvocation.ScriptName -Leaf)) {
+		# Invoked as a module
+		CheckForUpdates
 		PrunePackages -Auto
 	}
 }

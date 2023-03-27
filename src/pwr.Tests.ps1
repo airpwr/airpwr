@@ -220,3 +220,39 @@ if ($env:CI) {
 		}
 	}
 }
+
+Describe 'CheckForUpdates' {
+	Context "Throws" {
+		BeforeEach {
+			Mock HttpSend {
+				throw "offline"
+			}
+		}
+		It 'Writes Debug' {
+			{ CheckForUpdates } | Should -Not -Throw
+		}
+	}
+	Context "Version" {
+		BeforeAll {
+			Mock Import-PowerShellDataFile {
+				return @{
+					ModuleVersion = '1.2.3'
+				}
+			}
+			Mock HttpRequest {
+				return [Net.Http.HttpRequestMessage]::new()
+			}
+			Mock HttpSend {
+				$resp = [Net.Http.HttpResponseMessage]::new()
+				$resp.Headers.Add('Location', [Uri]'/packages/airpower/1.2.4')
+				return $resp
+			}
+			Mock WriteHost { }
+		}
+		It 'Writes Host' {
+			CheckForUpdates
+			Should -Invoke -CommandName 'WriteHost' -Exactly -Times 1
+		}
+	}
+
+}
