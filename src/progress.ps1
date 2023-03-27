@@ -42,7 +42,7 @@ function WritePeriodicConsole {
 	)
 	if (($null -eq $lastwrite) -or (((Get-Date) - $lastwrite).TotalMilliseconds -gt 125)) {
 		$line = & $DeferLine
-		[Console]::Write("`r$line")
+		WriteConsole $line
 		$script:lastwrite = (Get-Date)
 	}
 }
@@ -64,7 +64,11 @@ function WriteConsole {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Line
 	)
-	[Console]::Write("`r$Line")
+	if ($ProgressPreference -eq 'Continue') {
+		[Console]::Write("`r$Line")
+	} elseif ($ProgressPreference -ne 'SilentlyContinue') {
+		throw "cannot write progress for ProgressPreference=$ProgressPreference"
+	}
 }
 
 function AsByteString {

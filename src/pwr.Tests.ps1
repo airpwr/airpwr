@@ -213,7 +213,7 @@ if ($env:CI) {
 	Describe 'CI' {
 		BeforeEach {
 			[Db]::Init()
-			Mock WriteConsole { }
+			$ProgressPreference = 'SilentlyContinue'
 		}
 		It 'Pull and Exec' {
 			& $pwr 'exec' 'python' { python --version } -ErrorAction Stop
@@ -254,5 +254,4 @@ Describe 'CheckForUpdates' {
 			Should -Invoke -CommandName 'WriteHost' -Exactly -Times 1
 		}
 	}
-
 }

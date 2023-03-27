@@ -313,7 +313,7 @@ function SavePackage {
 					$temp += $layer.Digest | SaveBlob | ExtractTarGz -Digest $digest
 					"$($layer.Digest.Substring('sha256:'.Length).Substring(0, 12)): Pull complete" + ' ' * 60 | WriteConsole
 				} finally {
-					[Console]::WriteLine()
+					WriteConsole "`n"
 				}
 			}
 		}
