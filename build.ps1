@@ -23,7 +23,7 @@ function BuildPsm1 {
 }
 
 function GetModuleVersion {
-	"0.6.0.21"
+	"0.6.0.22"
 }
 
 $buildDir = '.\build\Airpower'
