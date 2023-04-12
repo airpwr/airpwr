@@ -3,7 +3,7 @@
 
 function GetSessionState {
 	return @{
-		Vars = (Get-Variable -Scope Global | ForEach-Object { ConvertTo-HashTable $_ } )
+		Vars = (Get-Variable -Scope Global | ForEach-Object { [psvariable]::new($_.Name, $_.Value) })
 		Env = (Get-Item Env:)
 	}
 }

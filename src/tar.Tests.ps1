@@ -2,11 +2,10 @@ BeforeAll {
 	. $PSCommandPath.Replace('.Tests.ps1', '.ps1')
 }
 
-$script:root = (Resolve-Path "$PSScriptRoot\..\test").Path
-$script:tgz = "$root\a9258b98bfc2c8ed0af1a6e7ee55e604286820c7bf81768ed0da34d5ed87d483.tar.gz"
-
 Describe "Untargz" {
 	BeforeAll {
+		$script:root = (Resolve-Path "$PSScriptRoot\..\test").Path
+		$script:tgz = "$root\a9258b98bfc2c8ed0af1a6e7ee55e604286820c7bf81768ed0da34d5ed87d483.tar.gz"
 		$script:AirpowerPath = "$root\airpower"
 		Mock ResolvePackagePath {
 			return "$AirpowerPath\0123456789abc"
