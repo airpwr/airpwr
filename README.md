@@ -40,8 +40,44 @@ Command | Description
 [`remote`](./doc/airpower-remote.md) | Outputs an object of remote packages and versions
 [`pull`](./doc/airpower-pull.md) | Downloads packages
 [`load`](./doc/airpower-load.md) | Loads packages into the PowerShell session
-[`exec`](#) | Runs a user-defined scriptblock in a managed PowerShell session
-[`run`](#) | Runs a user-defined scriptblock provided in a project file
+[`exec`](./doc/airpower-exec.md) | Runs a user-defined scriptblock in a managed PowerShell session
+[`run`](./doc/airpower-run.md) | Runs a user-defined scriptblock provided in a project file
 [`prune`](./doc/airpower-prune.md) | Deletes unreferenced packages
 [`remove`](./doc/airpower-remove.md) | Untags and deletes packages
 [`help`](./doc/airpower-help.md) | Outputs usage for this command
+
+# Configuration
+
+## Global
+
+The following variables modify runtime behavior of `airpower`. Each can be specified as an in-scope variable or an environment variable.
+
+### `AirpowerPullPolicy`
+
+The pull policy determines when a package is downloaded, or pulled, from the upstream registry. It is a `[string]` which can take on the values:
+
+- `"IfNotPresent"` - The package is pulled only when its tag does not exist locally.
+- `"Never"` - The package is never pulled. If the tag does not exist, an error is raised.
+- `"Always"` - The package is pulled from the upstream registry. If the local tag matches the remote digest, no data is downloaded.
+
+> The default `AirpowerPullPolicy` is `"IfNotPresent"`.
+
+### `AirpowerPath`
+
+The path determines where packages and metadata exist on a user's machine. It is a `[string]`.
+
+> The default `AirpowerPath` is `"$env:LocalAppData\Airpower"`.
+
+### `AirpowerAutoprune`
+
+The autoprune determines if and how often the [prune](./airpower-prune.md) action is taken. It is a [[timespan]](https://learn.microsoft.com/en-us/dotnet/api/system.timespan) but can be specified and parsed as a `[string]`. The autoprune mechanism is evaluated upon initialization of the `airpower` module, meaning once per shell instance in which you use an `airpower` command.
+
+For example, if `AirpowerAutoprune` is set to `'1.00:00:00'`, then prune will execute at most once per day.
+
+> The default `AirpowerAutoprune` is `$null`.
+
+## Other
+
+### `ProgressPreference`
+
+The progress bar for downloading and extracting packages can be suppressed by assigning the `ProgressPreference` variable to `'SilentlyContinue'`. This behavior is often desirable for environments such as CI pipelines.

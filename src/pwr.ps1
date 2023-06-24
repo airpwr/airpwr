@@ -1,6 +1,16 @@
 . $PSScriptRoot\package.ps1
 . $PSScriptRoot\shell.ps1
 
+<#
+.SYNOPSIS
+A package manager and environment to provide consistent tooling for software teams.
+
+.DESCRIPTION
+Airpower manages software packages using container technology and allows users to configure local PowerShell sessions to their need. Airpower seamlessly integrates common packages with a standardized project script to enable common build commands kept in source control for consistency.
+
+.LINK
+For detailed documentation and examples, visit https://github.com/airpwr/airpwr.
+#>
 function Invoke-Airpower {
 	[CmdletBinding()]
 	param (
