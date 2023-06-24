@@ -376,6 +376,21 @@ function UninstallPackage { # $locks, $digest, $err
 	return $locks, $digest, $null
 }
 
+function DeleteDirectory {
+	param (
+		[string]$Dir
+	)
+	$name = [IO.Path]::GetRandomFileName()
+	$tempDir = "$(GetPwrTempPath)\$name"
+	[IO.Directory]::CreateDirectory($tempDir) | Out-Null
+	try {
+		Robocopy.exe $tempDir $Dir /MIR /PURGE | Out-Null
+		[IO.Directory]::Delete($Dir)
+	} finally {
+		[IO.Directory]::Delete($tempDir)
+	}
+}
+
 function RemovePackage {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
@@ -390,7 +405,7 @@ function RemovePackage {
 		if ($null -ne $digest) {
 			$content = $digest | ResolvePackagePath
 			if (Test-Path $content -PathType Container) {
-				[IO.Directory]::Delete($content, $true)
+				DeleteDirectory $content
 			}
 			WriteHost "Deleted: $digest"
 		}
@@ -466,7 +481,7 @@ function PrunePackages {
 			$stats = Get-ChildItem $content -Recurse | Measure-Object -Sum Length
 			$bytes += $stats.Sum
 			if (Test-Path $content -PathType Container) {
-				[IO.Directory]::Delete("\\?\$((Resolve-Path $content).Path)", $true)
+				DeleteDirectory $content
 			}
 		}
 		if ($pruned) {
