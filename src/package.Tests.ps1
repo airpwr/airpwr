@@ -352,7 +352,7 @@ Describe 'PullPackage' {
 			Mock DebugRateLimit {}
 			Mock GetSize {}
 			Mock WriteHost {}
-			Mock InstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}}), 'new' }
+			Mock InstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}; Revert = {}}), 'new' }
 			Mock SavePackage {
 				$pkgPath = (@{} | ResolveRemoteRef |GetManifest | GetDigest) | ResolvePackagePath
 				MakeDirIfNotExist $pkgPath | Out-Null
@@ -400,7 +400,7 @@ Describe 'RemovePackage' {
 		BeforeAll {
 			Mock ResolveRemoteRef { 'none' }
 			Mock WriteHost {}
-			Mock UninstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}}), 'sha256:00000000000000000000', $null }
+			Mock UninstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}; Revert = {}}), 'sha256:00000000000000000000', $null }
 			Mock GetAirpowerPath {
 				$testPath
 			}

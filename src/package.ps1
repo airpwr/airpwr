@@ -141,19 +141,25 @@ function GetLocalPackages {
 	if ($err) {
 		throw $err
 	}
-	foreach ($lock in $locks) {
-		$tag = $lock.Key[2]
-		$t = [Tag]::new($tag)
-		$digest = if ($t.None) { $tag } else { $lock.Get() }
-		$m = [Db]::Get(('metadatadb', $digest))
-		$pkgs += [LocalPackage]@{
-			Package = $lock.Key[1]
-			Tag = $t
-			Digest = $digest | AsDigest
-			Size = $m.size | AsSize
-			Orphaned = if ($m.orphaned) { [datetime]::Parse($m.orphaned) }
+	try {
+		foreach ($lock in $locks) {
+			$tag = $lock.Key[2]
+			$t = [Tag]::new($tag)
+			$digest = if ($t.None) { $tag } else { $lock.Get() }
+			$m = [Db]::Get(('metadatadb', $digest))
+			$pkgs += [LocalPackage]@{
+				Package = $lock.Key[1]
+				Tag = $t
+				Digest = $digest | AsDigest
+				Size = $m.size | AsSize
+				Orphaned = if ($m.orphaned) { [datetime]::Parse($m.orphaned) }
+			}
+			$lock.Unlock()
 		}
-		$lock.Unlock()
+	} finally {
+		if ($locks) {
+			$locks.Revert()
+		}
 	}
 	if (-not $pkgs) {
 		$pkgs = ,[LocalPackage]@{}
@@ -278,22 +284,28 @@ function PullPackage {
 	$Pkg.Digest = $digest
 	$Pkg.Size = $size
 	$locks, $status = $Pkg | InstallPackage
-	$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"
-	if ($status -eq 'uptodate') {
-		WriteHost "Status: Package is up to date for $ref"
-	} else {
-		if ($status -in 'new', 'newer') {
-			$manifest | SavePackage
+	try {
+		$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"
+		if ($status -eq 'uptodate') {
+			WriteHost "Status: Package is up to date for $ref"
+		} else {
+			if ($status -in 'new', 'newer') {
+				$manifest | SavePackage
+			}
+			$refpath = $Pkg | ResolvePackageRefPath
+			MakeDirIfNotExist (Split-Path $refpath) | Out-Null
+			if (Test-Path -Path $refpath -PathType Container) {
+				[IO.Directory]::Delete($refpath)
+			}
+			New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
+			WriteHost "Status: Downloaded newer package for $ref"
 		}
-		$refpath = $Pkg | ResolvePackageRefPath
-		MakeDirIfNotExist (Split-Path $refpath) | Out-Null
-		if (Test-Path -Path $refpath -PathType Container) {
-			[IO.Directory]::Delete($refpath)
+		$locks.Unlock()
+	} finally {
+		if ($locks) {
+			$locks.Revert()
 		}
-		New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
-		WriteHost "Status: Downloaded newer package for $ref"
 	}
-	$locks.Unlock()
 }
 
 function SavePackage {
@@ -373,19 +385,25 @@ function RemovePackage {
 	if ($null -ne $err) {
 		throw $err
 	}
-	WriteHost "Untagged: $($Pkg.Package):$($pkg.Tag | AsTagString)"
-	if ($null -ne $digest) {
-		$content = $digest | ResolvePackagePath
-		if (Test-Path $content -PathType Container) {
-			[IO.Directory]::Delete($content, $true)
+	try {
+		WriteHost "Untagged: $($Pkg.Package):$($pkg.Tag | AsTagString)"
+		if ($null -ne $digest) {
+			$content = $digest | ResolvePackagePath
+			if (Test-Path $content -PathType Container) {
+				[IO.Directory]::Delete($content, $true)
+			}
+			WriteHost "Deleted: $digest"
 		}
-		WriteHost "Deleted: $digest"
+		$refpath = $Pkg | ResolvePackageRefPath
+		if (Test-Path -Path $refpath -PathType Container) {
+			[IO.Directory]::Delete($refpath)
+		}
+		$locks.Unlock()
+	} finally {
+		if ($locks) {
+			$locks.Revert()
+		}
 	}
-	$refpath = $Pkg | ResolvePackageRefPath
-	if (Test-Path -Path $refpath -PathType Container) {
-		[IO.Directory]::Delete($refpath)
-	}
-	$locks.Unlock()
 }
 
 function UninstallOrphanedPackages {
@@ -440,19 +458,25 @@ function PrunePackages {
 	}
 	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoprune)) } else { [timespan]::new(0) }
 	$locks, $pruned = UninstallOrphanedPackages $span
-	$bytes = 0
-	foreach ($i in $pruned) {
-		$content = $i.Digest | ResolvePackagePath
-		WriteHost "Deleted: $($i.Digest)"
-		$stats = Get-ChildItem $content -Recurse | Measure-Object -Sum Length
-		$bytes += $stats.Sum
-		if (Test-Path $content -PathType Container) {
-			[IO.Directory]::Delete("\\?\$((Resolve-Path $content).Path)", $true)
+	try {
+		$bytes = 0
+		foreach ($i in $pruned) {
+			$content = $i.Digest | ResolvePackagePath
+			WriteHost "Deleted: $($i.Digest)"
+			$stats = Get-ChildItem $content -Recurse | Measure-Object -Sum Length
+			$bytes += $stats.Sum
+			if (Test-Path $content -PathType Container) {
+				[IO.Directory]::Delete("\\?\$((Resolve-Path $content).Path)", $true)
+			}
 		}
-	}
-	if ($pruned) {
-		WriteHost "Total reclaimed space: $($bytes | AsByteString)"
-		$locks.Unlock()
+		if ($pruned) {
+			WriteHost "Total reclaimed space: $($bytes | AsByteString)"
+			$locks.Unlock()
+		}
+	} finally {
+		if ($locks) {
+			$locks.Revert()
+		}
 	}
 }
 
