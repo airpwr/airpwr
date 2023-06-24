@@ -1,0 +1,10 @@
+{
+	"env": {
+		"path": "${.}"
+	},
+	"somecfg": {
+		"env": {
+			"path": "${.}/another"
+		}
+	}
+}
