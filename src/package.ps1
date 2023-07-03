@@ -273,7 +273,8 @@ function PullPackage {
 	WriteHost "Pulling $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	WriteHost "Digest: $($digest)"
 	$k = 'metadatadb', $digest
-	if ([Db]::ContainsKey($k)) {
+	$exists = [Db]::ContainsKey($k)
+	if ($exists) {
 		$m = [Db]::Get($k)
 		$size = $m.Size
 	} else {
@@ -289,7 +290,7 @@ function PullPackage {
 		if ($status -eq 'uptodate') {
 			WriteHost "Status: Package is up to date for $ref"
 		} else {
-			if ($status -in 'new', 'newer') {
+			if ($status -in 'new', 'newer' -and -not $exists) {
 				$manifest | SavePackage
 			}
 			$refpath = $Pkg | ResolvePackageRefPath

@@ -391,6 +391,31 @@ Describe 'PullPackage' {
 			$got | Should -Be $want
 		}
 	}
+	Context 'DB Contains Key' {
+		BeforeAll {
+			New-Item -ItemType Directory -Path "$root\airpower\cache" -ErrorAction Ignore | Out-Null
+			Mock ResolveRemoteRef { 'none' }
+			Mock GetDigestForRef { 'ref123' }
+			Mock WriteHost {}
+			Mock InstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}; Revert = {}}), 'newer' }
+			Mock MakeDirIfNotExist {}
+			Mock SavePackage {}
+			Mock ResolvePackagePath {}
+			Mock New-Item {}
+		}
+		AfterAll {
+			[IO.Directory]::Delete("$root\airpower", $true)
+		}
+		It 'Does not SavePackage' {
+			[Db]::Put(@('metadatadb','ref123'), 'value')
+			$pkg = @{
+				Package = 'somepkg'
+				Tag = @{ Latest = $true }
+			}
+			$pkg | PullPackage
+			Should -Invoke -CommandName 'SavePackage' -Exactly -Times 0
+		}
+	}
 }
 
 Describe 'RemovePackage' {
