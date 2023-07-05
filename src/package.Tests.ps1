@@ -163,6 +163,40 @@ Describe 'InstallPackage' {
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).orphaned | Should -Be $null
 		}
 	}
+	Context 'From Specific Tag' {
+		BeforeEach {
+			[Db]::Put(('pkgdb', 'somepkg', 'latest'), '6523af3e765545')
+			[Db]::Put(('pkgdb', 'somepkg', '1.2.3'), 'fde54e65gd4678')
+			[Db]::Put(('metadatadb', 'fde54e65gd4678'), @{
+				RefCount = 1
+				Size = 293874
+			})
+			[Db]::Put(('metadatadb', '6523af3e765545'), @{
+				RefCount = 1
+				Size = 293874
+			})
+		}
+		It 'Tags Latest' {
+			$pkg = @{
+				Package = 'somepkg'
+				Tag = @{
+					Latest = $true
+				}
+				Digest = 'fde54e65gd4678'
+			}
+			$locks, $status = $pkg | InstallPackage
+			try {
+				$status | Should -Be 'ref'
+			} finally {
+				$locks.Unlock()
+			}
+			[Db]::Get(('pkgdb', 'somepkg', 'latest')) | Should -Be 'fde54e65gd4678'
+			[Db]::Get(('pkgdb', 'somepkg', '1.2.3')) | Should -Be 'fde54e65gd4678'
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).refcount | Should -Be 2
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).size | Should -Be 293874
+			[Db]::Get(('metadatadb', '6523af3e765545')).refcount | Should -Be 0
+		}
+	}
 }
 
 Describe 'UninstallPackage' {
@@ -395,9 +429,9 @@ Describe 'PullPackage' {
 		BeforeAll {
 			New-Item -ItemType Directory -Path "$root\airpower\cache" -ErrorAction Ignore | Out-Null
 			Mock ResolveRemoteRef { 'none' }
-			Mock GetDigestForRef { 'ref123' }
+			Mock GetDigestForRef { 'f12345' }
 			Mock WriteHost {}
-			Mock InstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}; Revert = {}}), 'newer' }
+			Mock InstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}; Revert = {}}), 'ref' }
 			Mock MakeDirIfNotExist {}
 			Mock SavePackage {}
 			Mock ResolvePackagePath {}
@@ -407,7 +441,6 @@ Describe 'PullPackage' {
 			[IO.Directory]::Delete("$root\airpower", $true)
 		}
 		It 'Does not SavePackage' {
-			[Db]::Put(@('metadatadb','ref123'), 'value')
 			$pkg = @{
 				Package = 'somepkg'
 				Tag = @{ Latest = $true }

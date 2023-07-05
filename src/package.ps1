@@ -210,7 +210,11 @@ function InstallPackage { # $locks, $status
 			'tag'
 		}
 	} elseif ($digest -ne $p) {
-		'newer'
+		if ($null -eq $m) {
+			'newer'
+		} else {
+			'ref'
+		}
 	} else {
 		'uptodate'
 	}
@@ -222,7 +226,7 @@ function InstallPackage { # $locks, $status
 				Size = $Pkg.Size
 			})
 		}
-		'newer' {
+		{$_ -in 'newer', 'ref'} {
 			$moLock, $err = [Db]::TryLock(('metadatadb', $p))
 			if ($err) {
 				$locks.Revert()
@@ -243,7 +247,7 @@ function InstallPackage { # $locks, $status
 			}
 			$moLock.Put($mo)
 		}
-		'tag' {
+		{$_ -in 'tag', 'ref'} {
 			if ([Db]::ContainsKey(('pkgdb', $name, $digest))) {
 				$dLock, $err = [Db]::TryLock(('pkgdb', $name, $digest))
 				if ($err) {
@@ -273,8 +277,7 @@ function PullPackage {
 	WriteHost "Pulling $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	WriteHost "Digest: $($digest)"
 	$k = 'metadatadb', $digest
-	$exists = [Db]::ContainsKey($k)
-	if ($exists) {
+	if ([Db]::ContainsKey($k)) {
 		$m = [Db]::Get($k)
 		$size = $m.Size
 	} else {
@@ -290,7 +293,7 @@ function PullPackage {
 		if ($status -eq 'uptodate') {
 			WriteHost "Status: Package is up to date for $ref"
 		} else {
-			if ($status -in 'new', 'newer' -and -not $exists) {
+			if ($status -in 'new', 'newer') {
 				$manifest | SavePackage
 			}
 			$refpath = $Pkg | ResolvePackageRefPath
