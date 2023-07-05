@@ -10,6 +10,12 @@ Describe "HttpSend" {
 	}
 }
 
+Describe "HttpSend" {
+	It "Error" {
+		{ HttpRequest 'bad.url' | HttpSend } | Should -Throw
+	}
+}
+
 Describe "GetJsonResponse" {
 	It "JSON Content" {
 		$resp = [Net.Http.HttpResponseMessage]::new()
