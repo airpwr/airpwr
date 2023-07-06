@@ -38,7 +38,7 @@ function HttpSend {
 	try {
 		return $cli.SendAsync($Req, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
 	} catch {
-		throw "An error occured while initiating an HTTP request; check your network and try again.`n+ $_"
+		throw "An error occured while initiating an HTTP request; check your network connection and try again.`n+ Caused by: $_"
 	}
 }
 
