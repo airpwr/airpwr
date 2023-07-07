@@ -37,6 +37,9 @@ $global:PesterPreference = (New-PesterConfiguration -Hashtable @{
 	TestResult = @{
 		Enabled = $true
 	}
+	Output = @{
+		Verbosity = 'Detailed'
+	}
 })
 
 $global:PesterPreference.CodeCoverage.CoveragePercentTarget = 100

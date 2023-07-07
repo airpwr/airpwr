@@ -163,6 +163,40 @@ Describe 'InstallPackage' {
 			[Db]::Get(('metadatadb', 'fde54e65gd4678')).orphaned | Should -Be $null
 		}
 	}
+	Context 'From Specific Tag' {
+		BeforeEach {
+			[Db]::Put(('pkgdb', 'somepkg', 'latest'), '6523af3e765545')
+			[Db]::Put(('pkgdb', 'somepkg', '1.2.3'), 'fde54e65gd4678')
+			[Db]::Put(('metadatadb', 'fde54e65gd4678'), @{
+				RefCount = 1
+				Size = 293874
+			})
+			[Db]::Put(('metadatadb', '6523af3e765545'), @{
+				RefCount = 1
+				Size = 293874
+			})
+		}
+		It 'Tags Latest' {
+			$pkg = @{
+				Package = 'somepkg'
+				Tag = @{
+					Latest = $true
+				}
+				Digest = 'fde54e65gd4678'
+			}
+			$locks, $status = $pkg | InstallPackage
+			try {
+				$status | Should -Be 'ref'
+			} finally {
+				$locks.Unlock()
+			}
+			[Db]::Get(('pkgdb', 'somepkg', 'latest')) | Should -Be 'fde54e65gd4678'
+			[Db]::Get(('pkgdb', 'somepkg', '1.2.3')) | Should -Be 'fde54e65gd4678'
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).refcount | Should -Be 2
+			[Db]::Get(('metadatadb', 'fde54e65gd4678')).size | Should -Be 293874
+			[Db]::Get(('metadatadb', '6523af3e765545')).refcount | Should -Be 0
+		}
+	}
 }
 
 Describe 'UninstallPackage' {
@@ -389,6 +423,30 @@ Describe 'PullPackage' {
 			$want = (Get-FileHash "$testPath\content\000000000000\file.txt").Hash
 			$got = (Get-FileHash "$testPath\ref\somepkg\file.txt").Hash
 			$got | Should -Be $want
+		}
+	}
+	Context 'DB Contains Key' {
+		BeforeAll {
+			New-Item -ItemType Directory -Path "$root\airpower\cache" -ErrorAction Ignore | Out-Null
+			Mock ResolveRemoteRef { 'none' }
+			Mock GetDigestForRef { 'f12345' }
+			Mock WriteHost {}
+			Mock InstallPackage { @(New-MockObject -Type 'System.Object' -Methods @{Unlock = {}; Revert = {}}), 'ref' }
+			Mock MakeDirIfNotExist {}
+			Mock SavePackage {}
+			Mock ResolvePackagePath {}
+			Mock New-Item {}
+		}
+		AfterAll {
+			[IO.Directory]::Delete("$root\airpower", $true)
+		}
+		It 'Does not SavePackage' {
+			$pkg = @{
+				Package = 'somepkg'
+				Tag = @{ Latest = $true }
+			}
+			$pkg | PullPackage
+			Should -Invoke -CommandName 'SavePackage' -Exactly -Times 0
 		}
 	}
 }

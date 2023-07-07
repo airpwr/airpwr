@@ -52,11 +52,3 @@ function GetJsonResponse {
 	}
 	return $Resp.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
 }
-
-function GetStringResponse {
-	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
-		[Net.Http.HttpResponseMessage]$Resp
-	)
-	return $Resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-}
