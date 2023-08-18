@@ -277,8 +277,7 @@ function PullPackage {
 	WriteHost "Pulling $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	WriteHost "Digest: $($digest)"
 	$k = 'metadatadb', $digest
-	if ([Db]::ContainsKey($k)) {
-		$m = [Db]::Get($k)
+	if ([Db]::ContainsKey($k) -and ($m = [Db]::Get($k)) -and $m.Size) {
 		$size = $m.Size
 	} else {
 		$manifest = $ref | GetManifest
