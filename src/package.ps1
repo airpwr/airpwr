@@ -319,17 +319,15 @@ function SavePackage {
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 	SetCursorVisible $false
 	try {
-		$manifest = $Resp | GetJsonResponse
+		$layers = $Resp | GetPackageLayers
 		$digest = $Resp | GetDigest
 		$temp = @()
-		foreach ($layer in $manifest.layers) {
-			if ($layer.mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
-				try {
-					$temp += $layer.Digest | SaveBlob | ExtractTarGz -Digest $digest
-					"$($layer.Digest.Substring('sha256:'.Length).Substring(0, 12)): Pull complete" + ' ' * 60 | WriteConsole
-				} finally {
-					WriteConsole "`n"
-				}
+		foreach ($layer in $layers) {
+			try {
+				$temp += $layer.Digest | SaveBlob | ExtractTarGz -Digest $digest
+				"$($layer.Digest.Substring('sha256:'.Length).Substring(0, 12)): Pull complete" + ' ' * 60 | WriteConsole
+			} finally {
+				WriteConsole "`n"
 			}
 		}
 		foreach ($tmp in $temp) {
