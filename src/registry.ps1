@@ -85,17 +85,30 @@ function DebugRateLimit {
 	}
 }
 
+function GetPackageLayers {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[Net.Http.HttpResponseMessage]$Resp
+	)
+	$layers = ($Resp | GetJsonResponse).layers
+	$packageLayers = [System.Collections.Generic.List[PSObject]]::new()
+	for ($i = 0; $i -lt $layers.Length; $i++) {
+		if ($layers[$i].mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip' -and ($i -gt 0 -or $layer.length -eq 1)) {
+			$packageLayers.Add($layers[$i])
+		}
+	}
+	return $packageLayers
+}
+
 function GetSize {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
-	$manifest = $Resp | GetJsonResponse
+	$layers = $Resp | GetPackageLayers
 	$size = 0
-	foreach ($layer in $manifest.layers) {
-		if ($layer.mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip') {
-			$size += $layer.size
-		}
+	foreach ($layer in $layers) {
+		$size += $layer.size
 	}
 	return $size
 }
