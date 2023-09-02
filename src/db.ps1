@@ -188,7 +188,7 @@ class Db {
 					if ($locks) {
 						$locks.Revert()
 					}
-					return $null, "a package $($decodedKey) is being used by another airpower process"
+					return $null, "a package $decodedKey is being used by another airpower process"
 				}
 			}
 		}
@@ -200,4 +200,3 @@ class Entry {
 	[string[]]$Key
 	[object]$Value
 }
-

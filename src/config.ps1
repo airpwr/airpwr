@@ -59,12 +59,23 @@ function GetPwrContentPath {
 	"$(GetAirpowerPath)\content"
 }
 
+function AsDigestString {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[string]$Digest
+	)
+	if ($Digest.StartsWith('sha256:')) {
+		return $Digest.Substring(7, 12)
+	}
+	return $Digest.Substring(0, 12)
+}
+
 function ResolvePackagePath {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Digest
 	)
-	return "$(GetPwrContentPath)\$($digest.Substring('sha256:'.Length).Substring(0, 12))"
+	"$(GetPwrContentPath)\$($Digest | AsDigestString)"
 }
 
 function MakeDirIfNotExist {
@@ -83,5 +94,12 @@ function FindConfig {
 			return $cfg
 		}
 		$path = $path | Split-Path -Parent
+	}
+}
+
+function LoadConfig {
+	$cfg = FindConfig
+	if ($cfg) {
+		. $cfg
 	}
 }

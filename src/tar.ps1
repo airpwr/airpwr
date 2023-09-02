@@ -122,7 +122,7 @@ function ExtractTar {
 			$filename = if ($xhdr.Path) { $xhdr.Path } else { $hdr.Filename }
 			$file = ($filename -split '/' | Select-Object -Skip 1) -join '\'
 			if ($filename.Contains('\..')) {
-				throw "suspicious tar filename '$($filename)'"
+				throw "suspicious tar filename '$filename'"
 			}
 			if ($hdr.Type -eq [char]53 -and $file -ne '') {
 				New-Item -Path "\\?\$root\$file" -ItemType Directory -Force -ErrorAction Ignore | Out-Null

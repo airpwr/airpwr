@@ -1,0 +1,13 @@
+. $PSScriptRoot\7-zip.ps1
+. $PSScriptRoot\doxygen.ps1
+. $PSScriptRoot\git.ps1
+. $PSScriptRoot\go.ps1
+. $PSScriptRoot\jom.ps1
+. $PSScriptRoot\llvm.ps1
+. $PSScriptRoot\nasm.ps1
+. $PSScriptRoot\nats-server.ps1
+. $PSScriptRoot\ninja.ps1
+. $PSScriptRoot\node.ps1
+. $PSScriptRoot\powershell.ps1
+. $PSScriptRoot\vscode.ps1
+. $PSScriptRoot\zig.ps1

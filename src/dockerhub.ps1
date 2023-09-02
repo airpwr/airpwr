@@ -1,10 +1,11 @@
+. $PSScriptRoot\download.ps1
 . $PSScriptRoot\http.ps1
 . $PSScriptRoot\config.ps1
 . $PSScriptRoot\progress.ps1
 . $PSScriptRoot\tar.ps1
 
 function GetDockerRepo {
-	return 'airpower/shipyard'
+	'airpower/shipyard'
 }
 
 function GetAuthToken {
@@ -14,8 +15,7 @@ function GetAuthToken {
 }
 
 function GetTagsList {
-	$api = "/v2/$(GetDockerRepo)/tags/list"
-	$endpoint = "https://index.docker.io$api"
+	$endpoint = "https://index.docker.io/v2/$(GetDockerRepo)/tags/list"
 	return HttpRequest $endpoint -AuthToken (GetAuthToken) | HttpSend | GetJsonResponse
 }
 
@@ -24,27 +24,10 @@ function GetManifest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Ref
 	)
-	$api = "/v2/$(GetDockerRepo)/manifests/$Ref"
 	$params = @{
-		URL = "https://index.docker.io$api"
+		Url = "https://index.docker.io/v2/$(GetDockerRepo)/manifests/$Ref"
 		AuthToken = (GetAuthToken)
 		Accept = 'application/vnd.docker.distribution.manifest.v2+json'
-	}
-	return HttpRequest @params | HttpSend
-}
-
-function GetBlob {
-	param (
-		[Parameter(Mandatory)]
-		[string]$Ref,
-		[long]$StartByte
-	)
-	$api = "/v2/$(GetDockerRepo)/blobs/$Ref"
-	$params = @{
-		URL = "https://index.docker.io$api"
-		AuthToken = (GetAuthToken)
-		Accept = 'application/octet-stream'
-		Range = "bytes=$StartByte-$($StartByte + 536870911)" # Request in 512 MB chunks
 	}
 	return HttpRequest @params | HttpSend
 }
@@ -54,9 +37,8 @@ function GetDigestForRef {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Ref
 	)
-	$api = "/v2/$(GetDockerRepo)/manifests/$Ref"
 	$params = @{
-		URL = "https://index.docker.io$api"
+		Url = "https://index.docker.io/v2/$(GetDockerRepo)/manifests/$Ref"
 		AuthToken = (GetAuthToken)
 		Accept = 'application/vnd.docker.distribution.manifest.v2+json'
 		Method = 'HEAD'
@@ -97,7 +79,7 @@ function GetPackageLayers {
 			$packageLayers.Add($layers[$i])
 		}
 	}
-	return $packageLayers
+	$packageLayers
 }
 
 function GetSize {
@@ -110,38 +92,51 @@ function GetSize {
 	foreach ($layer in $layers) {
 		$size += $layer.size
 	}
-	return $size
+	$size
 }
 
-function SaveBlob {
+function SavePackage {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[string]$Digest
+		[Net.Http.HttpResponseMessage]$Resp
 	)
-	$sha256 = $Digest.Substring('sha256:'.Length)
-	$path = "$(GetPwrTempPath)\$sha256.tar.gz"
-	if ((Test-Path $path) -and (Get-FileHash $path).Hash -eq $sha256) {
-		return $path
-	}
-	MakeDirIfNotExist (GetPwrTempPath) | Out-Null
-	$fs = [IO.File]::Open($path, [IO.FileMode]::OpenOrCreate)
-	$fs.Seek(0, [IO.SeekOrigin]::End) | Out-Null
+	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+	SetCursorVisible $false
 	try {
-		do {
-			$resp = GetBlob -Ref $Digest -StartByte $fs.Length
-			if (-not $resp.IsSuccessStatusCode) {
-				throw "cannot download blob $($Digest): $($resp.ReasonPhrase)"
+		$layers = $Resp | GetPackageLayers
+		$digest = $Resp | GetDigest
+		$files = @()
+		$bytes = 0
+		foreach ($layer in $layers) {
+			try {
+				$url = "https://index.docker.io/v2/$(GetDockerRepo)/blobs/$($layer.Digest)"
+				$auth = (GetAuthToken)
+				$accept = 'application/octet-stream'
+				$file, $size = $layer.Digest | DownloadFile -Extension 'tar.gz' -ArgumentList $url $auth $accept | ExtractTarGz -Digest $digest
+				"$($layer.Digest | AsDigestString): Pull complete" + ' ' * 60 | WriteConsole
+				$files += $file
+				$bytes += $size
+			} finally {
+				WriteConsole "`n"
 			}
-			$size = if ($resp.Content.Headers.ContentRange.HasLength) { $resp.Content.Headers.ContentRange.Length } else { $resp.Content.Headers.ContentLength + $fs.Length }
-			$task = $resp.Content.CopyToAsync($fs)
-			while (-not $task.IsCompleted) {
-				$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
-				Start-Sleep -Milliseconds 125
-			}
-		} while ($fs.Length -lt $size)
-		$sha256.Substring(0, 12) + ': Downloading ' + (GetProgress -Current $fs.Length -Total $size) + '  ' | WriteConsole
+		}
+		foreach ($f in $files) {
+			[IO.File]::Delete($f)
+		}
+		$bytes
 	} finally {
-		$fs.Close()
+		SetCursorVisible $true
 	}
-	return $path
+}
+
+function AirpowerDockerHubPull {
+	param (
+	)
+	# TODO
+}
+
+function AirpowerDockerHubPackage {
+	param (
+	)
+	# TODO
 }

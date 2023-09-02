@@ -76,10 +76,7 @@ function Invoke-Airpower {
 }
 
 function GetConfigPackages {
-	$cfg = FindConfig
-	if ($cfg) {
-		. $cfg
-	}
+	LoadConfig
 	[string[]]$AirpowerPackages
 }
 
@@ -181,13 +178,10 @@ function Invoke-AirpowerRun {
 		[Parameter(ValueFromRemainingArguments)]
 		[object[]]$ArgumentList
 	)
-	$cfg = FindConfig
-	if ($cfg) {
-		. $cfg
-	}
-	$fn = Get-Item "function:Airpower$FnName"
+	LoadConfig
+	$fn = Get-Item "function:AirpowerRun$FnName"
 	if ($fn) {
-		$params, $remaining = ResolveParameters "Airpower$FnName" $ArgumentList
+		$params, $remaining = ResolveParameters "AirpowerRun$FnName" $ArgumentList
 		$script = { & $fn @params @remaining }
 		if ($AirpowerPackages) {
 			Invoke-AirpowerExec -Packages $AirpowerPackages -ScriptBlock $script
@@ -255,7 +249,7 @@ For detailed documentation and examples, visit https://github.com/airpwr/airpwr.
 function CheckForUpdates {
 	try {
 		$params = @{
-			URL = "https://www.powershellgallery.com/packages/airpower"
+			Url = "https://www.powershellgallery.com/packages/airpower"
 			Method = 'HEAD'
 		}
 		$resp = HttpRequest @params | HttpSend -NoRedirect

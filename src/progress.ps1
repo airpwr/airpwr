@@ -61,7 +61,7 @@ function SetCursorVisible {
 
 function WriteConsole {
 	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
+		[Parameter(ValueFromPipeline)]
 		[string]$Line
 	)
 	if ($ProgressPreference -eq 'Continue') {
@@ -85,7 +85,7 @@ function AsByteString {
 	}
 	$r = @{
 		0 = ''
-		3 = 'k'
+		3 = 'K'
 		6 = 'M'
 		9 = 'G'
 	}

@@ -1,8 +1,9 @@
-. $PSScriptRoot\registry.ps1
 . $PSScriptRoot\config.ps1
+. $PSScriptRoot\download.ps1
 . $PSScriptRoot\progress.ps1
 . $PSScriptRoot\log.ps1
 . $PSScriptRoot\db.ps1
+. $PSScriptRoot\pkg\all.ps1
 
 function AsRemotePackage {
 	param (
@@ -12,51 +13,34 @@ function AsRemotePackage {
 	if ($RegistryTag -match '(.*)-([0-9].+)') {
 		return @{
 			Package = $Matches[1]
-			Tag = $Matches[2] | AsTagHashtable
+			Tag = if ($Matches[2] -in 'latest', '', $null) { 'latest' } else { $Matches[2] }
 		}
 	}
 	throw "failed to parse registry tag: $RegistryTag"
 }
 
-function AsTagHashtable {
-	param (
-		[Parameter(ValueFromPipeline)]
-		[string]$Tag
-	)
-	if ($Tag -in 'latest', '', $null) {
-		return @{ Latest = $true }
-	}
-	if ($Tag -match '^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?(?:(?:\+|_)([0-9]+))?$') {
-		return @{
-			Major = $Matches[1]
-			Minor = $Matches[2]
-			Patch = $Matches[3]
-			Build = $Matches[4]
-		}
-	}
-	throw "failed to parse tag: $Tag"
-}
-
 function AsTagString {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[collections.Hashtable]$Tag
+		[string]$Tag
 	)
-	if ($true -eq $Tag.Latest) {
-		"latest"
-	} else {
-		$s = "$($Tag.Major)"
-		if ($Tag.Minor) {
-			$s += ".$($Tag.Minor)"
+	if ($Tag -ne 'latest') {
+		$major, $minor, $build, $rev = AsVersion $Tag
+		if ($major) {
+			$s = $major
+			if ($minor) {
+				$s += ".$minor"
+				if ($build) {
+					$s += ".$build"
+					if ($rev) {
+						$s += ".$rev"
+					}
+				}
+			}
+			return $s
 		}
-		if ($Tag.Patch) {
-			$s += ".$($Tag.Patch)"
-		}
-		if ($Tag.Build) {
-			$s += "+$($Tag.Build)"
-		}
-		$s
 	}
+	$Tag
 }
 
 function GetRemotePackages {
@@ -89,7 +73,7 @@ function AsPackage {
 	if ($Pkg -match '^([^:]+)(?::([^:]+))?(?:::?([^:]+))?$') {
 		return @{
 			Package = $Matches[1]
-			Tag = $Matches[2] | AsTagHashtable
+			Tag = if ($Matches[2] -in 'latest', '', $null) { 'latest' } else { $Matches[2] }
 			Config = if ($Matches[3]) { $Matches[3] } else { 'default' }
 		}
 	}
@@ -101,36 +85,22 @@ function ResolvePackageRefPath {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	return "$(GetAirpowerPath)\ref\$($Pkg.Package)$(if (-not $Pkg.Tag.Latest) { "-$($Pkg.Tag | AsTagString)" })"
+	return "$(GetAirpowerPath)\ref\$($Pkg.Package)$(if ($Pkg.Tag -ne 'latest') { "-$($Pkg.Tag | AsTagString)" })"
 }
 
-function ResolveRemoteRef {
+function ResolveRemotePackage {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$remote = GetRemoteTags
-	if (-not $remote.$($Pkg.Package)) {
+	LoadConfig
+	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)"
+	if (-not $fn) {
 		throw "no such package: $($Pkg.Package)"
 	}
-	$want = $Pkg.Tag
-	foreach ($got in $remote.$($Pkg.Package)) {
-		$eq = $true
-		if ($null -ne $want.Major) {
-			$eq = $eq -and $want.Major -eq $got.Major
-		}
-		if ($null -ne $want.Minor) {
-			$eq = $eq -and $want.Minor -eq $got.Minor
-		}
-		if ($null -ne $want.Patch) {
-			$eq = $eq -and $want.Patch -eq $got.Patch
-		}
-		if ($null -ne $want.Build) {
-			$eq = $eq -and $want.Build -eq $got.Build
-		}
-		if ($eq) {
-			return "$($Pkg.Package)-$(($got.ToString()).Replace('+', '_'))"
-		}
+	$tag, $digest = & $fn $Pkg.Tag
+	if ($tag -and $digest) {
+		return $fn, $tag, $digest
 	}
 	throw "no such $($Pkg.Package) tag: $($Pkg.Tag)"
 }
@@ -172,8 +142,8 @@ function ResolvePackageDigest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	if ($pkg.digest) {
-		return $pkg.digest
+	if ($Pkg.Digest) {
+		return $Pkg.Digest
 	}
 	$k = 'pkgdb', $Pkg.Package, ($Pkg.Tag | AsTagString)
 	if ([Db]::ContainsKey($k)) {
@@ -272,20 +242,13 @@ function PullPackage {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$ref = $Pkg | ResolveRemoteRef
-	$digest = $ref | GetDigestForRef
-	WriteHost "Pulling $($Pkg.Package):$($pkg.Tag | AsTagString)"
-	WriteHost "Digest: $($digest)"
+	$fn, $tag, $digest = $Pkg | ResolveRemotePackage
+	WriteHost "Pulling $($Pkg.Package):$($Pkg.Tag | AsTagString) ($tag) $digest"
 	$k = 'metadatadb', $digest
 	if ([Db]::ContainsKey($k) -and ($m = [Db]::Get($k)) -and $m.Size) {
-		$size = $m.Size
-	} else {
-		$manifest = $ref | GetManifest
-		$manifest | DebugRateLimit
-		$size = $manifest | GetSize
+		$Pkg.Size = $m.Size
 	}
 	$Pkg.Digest = $digest
-	$Pkg.Size = $size
 	$locks, $status = $Pkg | InstallPackage
 	try {
 		$ref = "$($Pkg.Package):$($Pkg.Tag | AsTagString)"
@@ -293,7 +256,10 @@ function PullPackage {
 			WriteHost "Status: Package is up to date for $ref"
 		} else {
 			if ($status -in 'new', 'newer') {
-				$manifest | SavePackage
+				$Pkg.Size = & $fn $tag $digest
+				if ($Pkg.Size -le 0) {
+					throw "failed to retrieve: $ref"
+				}
 			}
 			$refpath = $Pkg | ResolvePackageRefPath
 			MakeDirIfNotExist (Split-Path $refpath) | Out-Null
@@ -301,40 +267,13 @@ function PullPackage {
 				[IO.Directory]::Delete($refpath)
 			}
 			New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
-			WriteHost "Status: Downloaded newer package for $ref"
+			"Status: Downloaded newer package for $ref ($($Pkg.Size | AsByteString))" + ' ' * 20 + "`n" | WriteConsole
 		}
 		$locks.Unlock()
 	} finally {
 		if ($locks) {
 			$locks.Revert()
 		}
-	}
-}
-
-function SavePackage {
-	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
-		[Net.Http.HttpResponseMessage]$Resp
-	)
-	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-	SetCursorVisible $false
-	try {
-		$layers = $Resp | GetPackageLayers
-		$digest = $Resp | GetDigest
-		$temp = @()
-		foreach ($layer in $layers) {
-			try {
-				$temp += $layer.Digest | SaveBlob | ExtractTarGz -Digest $digest
-				"$($layer.Digest.Substring('sha256:'.Length).Substring(0, 12)): Pull complete" + ' ' * 60 | WriteConsole
-			} finally {
-				WriteConsole "`n"
-			}
-		}
-		foreach ($tmp in $temp) {
-			[IO.File]::Delete($tmp)
-		}
-	} finally {
-		SetCursorVisible $true
 	}
 }
 
@@ -402,7 +341,7 @@ function RemovePackage {
 		throw $err
 	}
 	try {
-		WriteHost "Untagged: $($Pkg.Package):$($pkg.Tag | AsTagString)"
+		WriteHost "Untagged: $($Pkg.Package):$($Pkg.Tag | AsTagString)"
 		if ($null -ne $digest) {
 			$content = $digest | ResolvePackagePath
 			if (Test-Path $content -PathType Container) {
@@ -500,11 +439,11 @@ class Digest {
 	[string]$Sha256
 
 	Digest([string]$sha256) {
-		$this.Sha256 = $sha256
+		$this.Sha256 = $sha256 | AsDigestString
 	}
 
 	[string] ToString() {
-		return "$($this.Sha256.Substring('sha256:'.Length).Substring(0, 12))"
+		return $this.Sha256
 	}
 }
 
@@ -595,7 +534,7 @@ function ResolvePackage {
 		$cfg = if ($i -eq -1 -and $ref.Length -gt $i + 1) { 'default' } else { $ref.Substring($i+1).Trim() }
 		return @{
 			Digest = $Ref
-			Tag = @{}
+			Tag = 'latest'
 			Config = $cfg
 		}
 	}
