@@ -5,6 +5,30 @@ BeforeAll {
 	$script:AirpowerPath = "$root\airpower"
 }
 
+Describe 'TryEachPackage' {
+	Context 'Invoked with a test function that throws if not a or b' {
+		BeforeAll {
+			Mock AsPackage {
+				param (
+					[Parameter(Mandatory, ValueFromPipeline)]
+					[string]$Pkg
+				)
+				if (-not ('a', 'b' -contains $Pkg)) {
+					throw "[Test] Package is not valid: $Pkg"
+				}
+				return $Pkg
+			}
+		}
+		It 'Does not throw for packages a and b' {
+			TryEachPackage 'a', 'b' { $Input | AsPackage } | Should -Be 'a', 'b'
+		}
+		It 'Throws for packages c and d, but still tries a and b' {
+			{ TryEachPackage 'c', 'b', 'a', 'd' { $Input | AsPackage } -ActionDescription 'test' } | Should -Throw
+			Should -Invoke -CommandName 'AsPackage' -Exactly -Times 4
+		}
+	}
+}
+
 Describe 'InstallPackage' {
 	BeforeEach {
 		[Db]::Init()

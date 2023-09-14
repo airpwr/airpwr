@@ -136,9 +136,7 @@ function Invoke-AirpowerLoad {
 	if (-not $Packages) {
 		Write-Error 'no packages provided'
 	}
-	foreach ($p in $Packages) {
-		$p | ResolvePackage | LoadPackage
-	}
+	TryEachPackage $Packages { $Input | ResolvePackage | LoadPackage } -ActionDescription 'load'
 }
 
 function Invoke-AirpowerRemove {
@@ -146,9 +144,7 @@ function Invoke-AirpowerRemove {
 	param (
 		[string[]]$Packages
 	)
-	foreach ($p in $Packages) {
-		$p | AsPackage | RemovePackage
-	}
+	TryEachPackage $Packages { $Input | AsPackage | RemovePackage } -ActionDescription 'remove'
 }
 
 function Invoke-AirpowerPrune {
@@ -168,9 +164,7 @@ function Invoke-AirpowerPull {
 	if (-not $Packages) {
 		Write-Error "no packages provided"
 	}
-	foreach ($p in $Packages) {
-		$p | AsPackage | PullPackage
-	}
+	TryEachPackage $Packages { $Input | AsPackage | PullPackage } -ActionDescription 'pull'
 }
 
 function Invoke-AirpowerRun {
@@ -209,10 +203,7 @@ function Invoke-AirpowerExec {
 	if (-not $Packages) {
 		Write-Error "no packages provided"
 	}
-	$resolved = @()
-	foreach ($p in $Packages) {
-		$resolved += $p | ResolvePackage
-	}
+	$resolved = TryEachPackage $Packages { $Input | ResolvePackage } -ActionDescription 'resolve'
 	ExecuteScript -ScriptBlock $ScriptBlock -Pkgs $resolved
 }
 

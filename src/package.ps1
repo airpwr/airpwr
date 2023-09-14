@@ -96,6 +96,30 @@ function AsPackage {
 	throw "failed to parse package: $Pkg"
 }
 
+function TryEachPackage {
+	param (
+		[Parameter(Mandatory, Position = 0)]
+		[string[]]$Packages,
+		[Parameter(Mandatory, Position = 1)]
+		[scriptblock]$ScriptBlock,
+		[string]$ActionDescription = 'process'
+	)
+	$results = @()
+	$failures = @()
+	foreach ($p in $Packages) {
+		try {
+			$results += $p | &$ScriptBlock
+		} catch {
+			Write-Error $_
+			$failures += $p
+		}
+	}
+	if ($failures.Count -gt 0) {
+		throw "Failed to $ActionDescription packages: $($failures -join ', ')"
+	}
+	return $results
+}
+
 function ResolvePackageRefPath {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
