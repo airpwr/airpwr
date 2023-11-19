@@ -485,7 +485,7 @@ function UninstallOrphanedPackages {
 		throw $err
 	}
 	foreach ($lock in $ls) {
-		if ($lock.Key[2] -match '^sha256:' -and $lock.Key[2] -in $metadata.digest) {
+		if ($lock.Key[2].StartsWith('sha256:') -and $lock.Key[2] -in $metadata.digest) {
 			$locks += $lock
 			$lock.Remove()
 		} else {
@@ -539,7 +539,7 @@ function GetOutofdatePackages {
 	try {
 		foreach ($lock in $locks) {
 			$tag = $lock.Key[2]
-			if ($tag -notmatch '^sha256:') {
+			if (-not $tag.StartsWith('sha256:')) {
 				$mlock, $err = [Db]::TryLock(('metadatadb', $lock.Get()))
 				if ($err) {
 					throw $err
@@ -568,7 +568,7 @@ function UpdatePackages {
 	if ($Auto -and -not (GetAirpowerAutoupdate)) {
 		return
 	}
-	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoupdate)) } else { [timespan]::Zero }
+	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoupdate)) } else { [timespan]::MinValue }
 	$pkgs = GetOutofdatePackages $span
 	if ($Auto -and -not $pkgs) {
 		return
