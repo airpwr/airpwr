@@ -73,7 +73,7 @@ The path determines where packages and metadata exist on a user's machine. It is
 
 The autoupdate determines if and how often the [update](./doc/airpower-update.md) action is taken. It is a [[timespan]](https://learn.microsoft.com/en-us/dotnet/api/system.timespan) but can be specified and parsed as a `[string]`. The autoupdate mechanism is evaluated upon initialization of the `airpower` module, meaning once per shell instance in which you use an `airpower` command.
 
-For example, if `AirpowerAutoupdate` is set to `'1.00:00:00'`, then update will execute at most once per day, unless the `update` command is invoked explicitly.
+For example, if `AirpowerAutoupdate` is set to `'1.00:00:00'`, then update will only automatically execute for packages that were last updated at least one day ago.
 
 > The default `AirpowerAutoupdate` is `$null`
 
@@ -81,7 +81,7 @@ For example, if `AirpowerAutoupdate` is set to `'1.00:00:00'`, then update will 
 
 The autoprune determines if and how often the [prune](./doc/airpower-prune.md) action is taken. It is a [[timespan]](https://learn.microsoft.com/en-us/dotnet/api/system.timespan) but can be specified and parsed as a `[string]`. The autoprune mechanism is evaluated upon initialization of the `airpower` module, meaning once per shell instance in which you use an `airpower` command.
 
-For example, if `AirpowerAutoprune` is set to `'1.00:00:00'`, then prune will execute at most once per day, unless the `prune` command is invoked explicitly.
+For example, if `AirpowerAutoprune` is set to `'1.00:00:00'`, then prune will only automatically execute for packages that have been orphaned for at least one day.
 
 > The default `AirpowerAutoprune` is `$null`.
 

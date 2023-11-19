@@ -1,4 +1,4 @@
-# prune
+# update
 
 Updates all tagged packages.
 

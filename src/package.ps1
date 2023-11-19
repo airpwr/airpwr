@@ -570,6 +570,9 @@ function UpdatePackages {
 	}
 	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoupdate)) } else { [timespan]::Zero }
 	$pkgs = GetOutofdatePackages $span
+	if ($Auto -and -not $pkgs) {
+		return
+	}
 	$updated = 0
 	foreach ($pkg in $pkgs) {
 		try {
