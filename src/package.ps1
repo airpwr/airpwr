@@ -499,10 +499,11 @@ function PrunePackages {
 	param (
 		[switch]$Auto
 	)
-	if ($Auto -and -not (GetAirpowerAutoprune)) {
+	$autoprune = (GetAirpowerAutoprune)
+	if ($Auto -and -not $autoprune) {
 		return
 	}
-	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoprune)) } else { [timespan]::Zero }
+	$span = if ($Auto) { [timespan]::Parse($autoprune) } else { [timespan]::Zero }
 	$locks, $pruned = UninstallOrphanedPackages $span
 	try {
 		$bytes = 0
@@ -565,10 +566,11 @@ function UpdatePackages {
 	param (
 		[switch]$Auto
 	)
-	if ($Auto -and -not (GetAirpowerAutoupdate)) {
+	$autoupdate = (GetAirpowerAutoupdate)
+	if ($Auto -and -not $autoupdate) {
 		return
 	}
-	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoupdate)) } else { [timespan]::MinValue }
+	$span = if ($Auto) { [timespan]::Parse($autoupdate) } else { [timespan]::MinValue }
 	$pkgs = GetOutofdatePackages $span
 	if ($Auto -and -not $pkgs) {
 		return
@@ -697,7 +699,8 @@ function ResolvePackage {
 	}
 	$pkg = $Ref | AsPackage
 	$digest = $pkg | ResolvePackageDigest
-	switch (GetAirpowerPullPolicy) {
+	$pullpolicy = (GetAirpowerPullPolicy)
+	switch ($pullpolicy) {
 		'IfNotPresent' {
 			if (-not $digest) {
 				$pkg | PullPackage | Out-Null
@@ -714,7 +717,7 @@ function ResolvePackage {
 			$pkg.digest = $pkg | ResolvePackageDigest
 		}
 		default {
-			throw "invalid AirpowerPullPolicy '$(GetAirpowerPullPolicy)'"
+			throw "AirpowerPullPolicy '$pullpolicy' is not valid"
 		}
 	}
 	return $pkg
