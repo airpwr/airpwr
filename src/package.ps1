@@ -340,6 +340,7 @@ function PullPackage {
 			$locks.Revert()
 		}
 	}
+	return $status
 }
 
 function SavePackage {
@@ -569,9 +570,13 @@ function UpdatePackages {
 	}
 	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoupdate)) } else { [timespan]::Zero }
 	$pkgs = GetOutofdatePackages $span
+	$updated = 0
 	foreach ($pkg in $pkgs) {
 		try {
-			$pkg | AsPackage | PullPackage
+			$status = $pkg | AsPackage | PullPackage
+			if ($status -ne 'uptodate') {
+				++$updated
+			}
 		} catch {
 			if (-not $err) {
 				$err = $_
@@ -581,6 +586,7 @@ function UpdatePackages {
 	if ($err) {
 		throw $err
 	}
+	WriteHost "Updated $updated package$(if ($updated -ne 1) { 's' })"
 }
 
 class Digest {
