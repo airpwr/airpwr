@@ -176,6 +176,7 @@ function GetLocalPackages {
 				Tag = $t
 				Digest = $digest | AsDigest
 				Size = $m.size | AsSize
+				Updated = if ($m.updated) { [datetime]::Parse($m.updated) } else { }
 				Orphaned = if ($m.orphaned) { [datetime]::Parse($m.orphaned) }
 			}
 			$lock.Unlock()
@@ -248,6 +249,7 @@ function InstallPackage { # $locks, $status
 			$mLock.Put(@{
 				RefCount = 1
 				Size = $Pkg.Size
+				Updated = [datetime]::UtcNow.ToString()
 			})
 		}
 		{$_ -in 'newer', 'ref'} {
@@ -267,7 +269,7 @@ function InstallPackage { # $locks, $status
 				}
 				$locks += $poLock
 				$poLock.Put($null)
-				$mo.Orphaned = [DateTime]::UtcNow.ToString('u')
+				$mo.Orphaned = [datetime]::UtcNow.ToString('u')
 			}
 			$moLock.Put($mo)
 		}
@@ -285,6 +287,11 @@ function InstallPackage { # $locks, $status
 				$m.Remove('Orphaned')
 			}
 			$m.RefCount += 1
+			$m.Updated = [datetime]::UtcNow.ToString()
+			$mLock.Put($m)
+		}
+		'uptodate' {
+			$m.Updated = [datetime]::UtcNow.ToString()
 			$mLock.Put($m)
 		}
 	}
@@ -459,10 +466,8 @@ function UninstallOrphanedPackages {
 	}
 	foreach ($lock in $ls) {
 		$m = $lock.Get() | ConvertTo-HashTable
-		if ($m.orphaned) {
-			$orphaned = $now - [datetime]::Parse($m.orphaned)
-		}
-		if ($m.refcount -eq 0 -and $orphaned -ge $span) {
+		$orphaned = if ($m.orphaned) { $now - [datetime]::Parse($m.orphaned) }
+		if ($m.refcount -eq 0 -and $orphaned -ge $Span) {
 			$locks += $lock
 			$m.digest = $lock.Key[1]
 			$metadata += $m
@@ -496,7 +501,7 @@ function PrunePackages {
 	if ($Auto -and -not (GetAirpowerAutoprune)) {
 		return
 	}
-	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoprune)) } else { [timespan]::new(0) }
+	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoprune)) } else { [timespan]::Zero }
 	$locks, $pruned = UninstallOrphanedPackages $span
 	try {
 		$bytes = 0
@@ -517,6 +522,64 @@ function PrunePackages {
 		if ($locks) {
 			$locks.Revert()
 		}
+	}
+}
+
+function GetOutofdatePackages {
+	param (
+		[timespan]$Span
+	)
+	$now = [datetime]::UtcNow
+	$locks, $err = [Db]::TryLockAll('pkgdb')
+	if ($err) {
+		throw $err
+	}
+	$pkgs = @()
+	try {
+		foreach ($lock in $locks) {
+			$tag = $lock.Key[2]
+			if ($tag -notmatch '^sha256:') {
+				$mlock, $err = [Db]::TryLock(('metadatadb', $lock.Get()))
+				if ($err) {
+					throw $err
+				}
+				$m = $mlock.Get() | ConvertTo-HashTable
+				$since = if ($m.updated) { $now - [datetime]::Parse($m.updated) } else { [timespan]::MaxValue }
+				if ($since -ge $Span) {
+					$pkgs += "$($lock.Key[1]):$($lock.Key[2])"
+				}
+				$mlock.Revert()
+			}
+			$lock.Revert()
+		}
+	} finally {
+		if ($locks) {
+			$locks.Revert()
+		}
+	}
+	return $pkgs
+}
+
+function UpdatePackages {
+	param (
+		[switch]$Auto
+	)
+	if ($Auto -and -not (GetAirpowerAutoupdate)) {
+		return
+	}
+	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoupdate)) } else { [timespan]::Zero }
+	$pkgs = GetOutofdatePackages $span
+	foreach ($pkg in $pkgs) {
+		try {
+			$pkg | AsPackage | PullPackage
+		} catch {
+			if (-not $err) {
+				$err = $_
+			}
+		}
+	}
+	if ($err) {
+		throw $err
 	}
 }
 
@@ -679,6 +742,7 @@ class LocalPackage {
 	[Tag]$Tag
 	[Digest]$Digest
 	[Size]$Size
+	[object]$Updated
 	[object]$Orphaned
 	# Signers
 }

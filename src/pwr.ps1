@@ -15,7 +15,7 @@ function Invoke-Airpower {
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory)]
-		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'exec', 'run', 'remove', 'rm', 'prune', 'help', 'h')]
+		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'exec', 'run', 'remove', 'rm', 'prune', 'update', 'help', 'h')]
 		[string]$Command,
 		[Parameter(ValueFromRemainingArguments)]
 		[object[]]$ArgumentList
@@ -47,6 +47,9 @@ function Invoke-Airpower {
 			}
 			'prune' {
 				Invoke-AirpowerPrune
+			}
+			'update' {
+				Invoke-AirpowerUpdate
 			}
 			{$_ -in 'remove', 'rm'} {
 				if ($PSVersionTable.PSVersion.Major -le 5) {
@@ -147,6 +150,12 @@ function Invoke-AirpowerRemove {
 	TryEachPackage $Packages { $Input | AsPackage | RemovePackage } -ActionDescription 'remove'
 }
 
+function Invoke-AirpowerUpdate {
+	[CmdletBinding()]
+	param ()
+	UpdatePackages
+}
+
 function Invoke-AirpowerPrune {
 	[CmdletBinding()]
 	param ()
@@ -234,6 +243,7 @@ Commands:
   load           Loads packages into the PowerShell session
   exec           Runs a user-defined scriptblock in a managed PowerShell session
   run            Runs a user-defined scriptblock provided in a project file
+  update         Updates all packages
   prune          Deletes unreferenced packages
   remove         Untags and deletes packages
   help           Outputs usage for this command
@@ -270,6 +280,7 @@ Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
 	if ('Airpower.psm1' -eq (Split-Path $MyInvocation.ScriptName -Leaf)) {
 		# Invoked as a module
 		CheckForUpdates
+		UpdatePackages -Auto
 		PrunePackages -Auto
 	}
 }

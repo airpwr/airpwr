@@ -27,11 +27,9 @@ class FileLock {
 	}
 
 	Unlock() {
-		if ($this.Buffer) {
-			if ($this.Buffer.Length -gt 0) {
-				$this.File.SetLength(0)
-				$this.Buffer.WriteTo($this.File)
-			}
+		if ($this.Buffer -and $this.Buffer.Length -gt 0) {
+			$this.File.SetLength(0)
+			$this.Buffer.WriteTo($this.File)
 		}
 		$this.File.Dispose()
 		if ($this.Delete) {
@@ -54,7 +52,7 @@ class FileLock {
 	}
 
 	Put([object]$Value) {
-		$content = [Db]::Encode($value)
+		$content = [Db]::Encode($Value)
 		$this.Buffer.Write([Text.Encoding]::UTF8.GetBytes($content), 0, [Text.Encoding]::UTF8.GetByteCount($content))
 	}
 }
@@ -88,15 +86,6 @@ class Db {
 
 	static Put([string[]]$key, [object]$value) {
 		[IO.File]::WriteAllText("$([Db]::Dir)\$([Db]::Key($key))", [Db]::Encode($value))
-	}
-
-	static [bool] TryPut([string[]]$key, [object]$value) {
-		try {
-			[Db]::TryPut($key, $value)
-			return $true
-		} catch {
-			return $false
-		}
 	}
 
 	static [string] Encode([object]$value) {
@@ -200,4 +189,3 @@ class Entry {
 	[string[]]$Key
 	[object]$Value
 }
-
