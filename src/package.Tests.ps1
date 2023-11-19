@@ -330,7 +330,32 @@ Describe 'PrunePackages' {
 		}
 		It 'Prunes' {
 			PrunePackages -Auto
-			Should -Invoke -CommandName 'UninstallOrphanedPackages' -Exactly -Times 1 -ParameterFilter { $span -eq [timespan]::new(4, 11, 22, 33) }
+			Should -Invoke -CommandName 'UninstallOrphanedPackages' -Exactly -Times 1 -ParameterFilter { $Span -eq [timespan]::new(4, 11, 22, 33) }
+		}
+	}
+}
+
+Describe 'UpdatePackages' {
+	BeforeEach {
+		[Db]::Init()
+	}
+	AfterEach {
+		[IO.Directory]::Delete("\\?\$root\airpower", $true)
+	}
+	Context 'From DB' {
+		# TODO
+	}
+	Context 'Auto' {
+		BeforeAll {
+			Mock GetOutofdatePackages { @() }
+			$script:AirpowerAutoupdate = "4.11:22:33"
+		}
+		AfterAll {
+			$script:AirpowerAutoupdate = $null
+		}
+		It 'Updates' {
+			UpdatePackages -Auto
+			Should -Invoke -CommandName 'GetOutofdatePackages' -Exactly -Times 1 -ParameterFilter { $Span -eq [timespan]::new(4, 11, 22, 33) }
 		}
 	}
 }
