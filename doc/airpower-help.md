@@ -21,6 +21,7 @@ Commands:
   load           Loads packages into the PowerShell session
   exec           Runs a user-defined scriptblock in a managed PowerShell session
   run            Runs a user-defined scriptblock provided in a project file
+  update         Updates all tagged packages
   prune          Deletes unreferenced packages
   remove         Untags and deletes packages
   help           Outputs usage for this command

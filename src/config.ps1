@@ -47,6 +47,14 @@ function GetAirpowerAutoprune {
 	}
 }
 
+function GetAirpowerAutoupdate {
+	if ($AirpowerAutoupdate) {
+		$AirpowerAutoupdate
+	} elseif ($env:AirpowerAutoupdate) {
+		$env:AirpowerAutoupdate
+	}
+}
+
 function GetPwrDBPath {
 	"$(GetAirpowerPath)\cache"
 }

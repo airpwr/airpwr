@@ -176,6 +176,7 @@ function GetLocalPackages {
 				Tag = $t
 				Digest = $digest | AsDigest
 				Size = $m.size | AsSize
+				Updated = if ($m.updated) { [datetime]::Parse($m.updated) } else { }
 				Orphaned = if ($m.orphaned) { [datetime]::Parse($m.orphaned) }
 			}
 			$lock.Unlock()
@@ -248,6 +249,7 @@ function InstallPackage { # $locks, $status
 			$mLock.Put(@{
 				RefCount = 1
 				Size = $Pkg.Size
+				Updated = [datetime]::UtcNow.ToString()
 			})
 		}
 		{$_ -in 'newer', 'ref'} {
@@ -267,7 +269,7 @@ function InstallPackage { # $locks, $status
 				}
 				$locks += $poLock
 				$poLock.Put($null)
-				$mo.Orphaned = [DateTime]::UtcNow.ToString('u')
+				$mo.Orphaned = [datetime]::UtcNow.ToString('u')
 			}
 			$moLock.Put($mo)
 		}
@@ -285,6 +287,11 @@ function InstallPackage { # $locks, $status
 				$m.Remove('Orphaned')
 			}
 			$m.RefCount += 1
+			$m.Updated = [datetime]::UtcNow.ToString()
+			$mLock.Put($m)
+		}
+		'uptodate' {
+			$m.Updated = [datetime]::UtcNow.ToString()
 			$mLock.Put($m)
 		}
 	}
@@ -333,6 +340,7 @@ function PullPackage {
 			$locks.Revert()
 		}
 	}
+	return $status
 }
 
 function SavePackage {
@@ -459,10 +467,8 @@ function UninstallOrphanedPackages {
 	}
 	foreach ($lock in $ls) {
 		$m = $lock.Get() | ConvertTo-HashTable
-		if ($m.orphaned) {
-			$orphaned = $now - [datetime]::Parse($m.orphaned)
-		}
-		if ($m.refcount -eq 0 -and $orphaned -ge $span) {
+		$orphaned = if ($m.orphaned) { $now - [datetime]::Parse($m.orphaned) }
+		if ($m.refcount -eq 0 -and $orphaned -ge $Span) {
 			$locks += $lock
 			$m.digest = $lock.Key[1]
 			$metadata += $m
@@ -479,7 +485,7 @@ function UninstallOrphanedPackages {
 		throw $err
 	}
 	foreach ($lock in $ls) {
-		if ($lock.Key[2] -match '^sha256:' -and $lock.Key[2] -in $metadata.digest) {
+		if ($lock.Key[2].StartsWith('sha256:') -and $lock.Key[2] -in $metadata.digest) {
 			$locks += $lock
 			$lock.Remove()
 		} else {
@@ -493,10 +499,11 @@ function PrunePackages {
 	param (
 		[switch]$Auto
 	)
-	if ($Auto -and -not (GetAirpowerAutoprune)) {
+	$autoprune = (GetAirpowerAutoprune)
+	if ($Auto -and -not $autoprune) {
 		return
 	}
-	$span = if ($Auto) { [timespan]::Parse((GetAirpowerAutoprune)) } else { [timespan]::new(0) }
+	$span = if ($Auto) { [timespan]::Parse($autoprune) } else { [timespan]::Zero }
 	$locks, $pruned = UninstallOrphanedPackages $span
 	try {
 		$bytes = 0
@@ -518,6 +525,73 @@ function PrunePackages {
 			$locks.Revert()
 		}
 	}
+}
+
+function GetOutofdatePackages {
+	param (
+		[timespan]$Span
+	)
+	$now = [datetime]::UtcNow
+	$locks, $err = [Db]::TryLockAll('pkgdb')
+	if ($err) {
+		throw $err
+	}
+	$pkgs = @()
+	try {
+		foreach ($lock in $locks) {
+			$tag = $lock.Key[2]
+			if (-not $tag.StartsWith('sha256:')) {
+				$mlock, $err = [Db]::TryLock(('metadatadb', $lock.Get()))
+				if ($err) {
+					throw $err
+				}
+				$m = $mlock.Get() | ConvertTo-HashTable
+				$since = if ($m.updated) { $now - [datetime]::Parse($m.updated) } else { [timespan]::MaxValue }
+				if ($since -ge $Span) {
+					$pkgs += "$($lock.Key[1]):$($lock.Key[2])"
+				}
+				$mlock.Revert()
+			}
+			$lock.Revert()
+		}
+	} finally {
+		if ($locks) {
+			$locks.Revert()
+		}
+	}
+	return $pkgs
+}
+
+function UpdatePackages {
+	param (
+		[switch]$Auto
+	)
+	$autoupdate = (GetAirpowerAutoupdate)
+	if ($Auto -and -not $autoupdate) {
+		return
+	}
+	$span = if ($Auto) { [timespan]::Parse($autoupdate) } else { [timespan]::MinValue }
+	$pkgs = GetOutofdatePackages $span
+	if ($Auto -and -not $pkgs) {
+		return
+	}
+	$updated = 0
+	foreach ($pkg in $pkgs) {
+		try {
+			$status = $pkg | AsPackage | PullPackage
+			if ($status -ne 'uptodate') {
+				++$updated
+			}
+		} catch {
+			if (-not $err) {
+				$err = $_
+			}
+		}
+	}
+	if ($err) {
+		throw $err
+	}
+	WriteHost "Updated $updated package$(if ($updated -ne 1) { 's' })"
 }
 
 class Digest {
@@ -625,7 +699,8 @@ function ResolvePackage {
 	}
 	$pkg = $Ref | AsPackage
 	$digest = $pkg | ResolvePackageDigest
-	switch (GetAirpowerPullPolicy) {
+	$pullpolicy = (GetAirpowerPullPolicy)
+	switch ($pullpolicy) {
 		'IfNotPresent' {
 			if (-not $digest) {
 				$pkg | PullPackage | Out-Null
@@ -642,7 +717,7 @@ function ResolvePackage {
 			$pkg.digest = $pkg | ResolvePackageDigest
 		}
 		default {
-			throw "invalid AirpowerPullPolicy '$(GetAirpowerPullPolicy)'"
+			throw "AirpowerPullPolicy '$pullpolicy' is not valid"
 		}
 	}
 	return $pkg
@@ -679,6 +754,7 @@ class LocalPackage {
 	[Tag]$Tag
 	[Digest]$Digest
 	[Size]$Size
+	[object]$Updated
 	[object]$Orphaned
 	# Signers
 }

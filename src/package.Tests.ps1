@@ -330,7 +330,59 @@ Describe 'PrunePackages' {
 		}
 		It 'Prunes' {
 			PrunePackages -Auto
-			Should -Invoke -CommandName 'UninstallOrphanedPackages' -Exactly -Times 1 -ParameterFilter { $span -eq [timespan]::new(4, 11, 22, 33) }
+			Should -Invoke -CommandName 'UninstallOrphanedPackages' -Exactly -Times 1 -ParameterFilter { $Span -eq [timespan]::new(4, 11, 22, 33) }
+		}
+	}
+}
+
+Describe 'UpdatePackages' {
+	BeforeEach {
+		[Db]::Init()
+	}
+	AfterEach {
+		[IO.Directory]::Delete("\\?\$root\airpower", $true)
+	}
+	Context 'From DB' {
+		BeforeEach {
+			[Db]::Put(('pkgdb', 'somepkg', 'sha256:fde54e65gd4678'), $null)
+			[Db]::Put(('pkgdb', 'somepkg', 'latest'), 'abc')
+			[Db]::Put(('pkgdb', 'another', 'sha256:e340857fffc987'), $null)
+			[Db]::Put(('pkgdb', 'another', 'latest'), 'xyz')
+			[Db]::Put(('metadatadb', 'abc'), @{RefCount = 1; Updated = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'xyz'), @{RefCount = 1; Updated = '2999-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 1; Updated = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 1; Updated = '2999-01-01 00:00:00Z'})
+		}
+		It 'Updates' {
+			Mock PullPackage {
+				return 'newer'
+			}
+			UpdatePackages
+			Should -Invoke -CommandName 'PullPackage' -Exactly -Times 2
+		}
+		It 'Outofdate' {
+			$pkgs = GetOutofdatePackages ([timespan]::MinValue)
+			$pkgs.Count | Should -Be 2
+			$pkgs | Should -Contain 'somepkg:latest'
+			$pkgs | Should -Contain 'another:latest'
+		}
+		It 'Outofdate by timespan' {
+			$pkgs = GetOutofdatePackages ([timespan]::Zero)
+			$pkgs.Count | Should -Be 1
+			$pkgs | Should -Be 'somepkg:latest'
+		}
+	}
+	Context 'Auto' {
+		BeforeAll {
+			Mock GetOutofdatePackages { @() }
+			$script:AirpowerAutoupdate = "4.11:22:33"
+		}
+		AfterAll {
+			$script:AirpowerAutoupdate = $null
+		}
+		It 'Updates' {
+			UpdatePackages -Auto
+			Should -Invoke -CommandName 'GetOutofdatePackages' -Exactly -Times 1 -ParameterFilter { $Span -eq [timespan]::new(4, 11, 22, 33) }
 		}
 	}
 }
