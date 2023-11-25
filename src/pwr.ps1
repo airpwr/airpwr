@@ -173,7 +173,7 @@ function Invoke-AirpowerPull {
 	if (-not $Packages) {
 		Write-Error "no packages provided"
 	}
-	TryEachPackage $Packages { $Input | AsPackage | PullPackage } -ActionDescription 'pull'
+	TryEachPackage $Packages { $Input | AsPackage | PullPackage | Out-Null } -ActionDescription 'pull'
 }
 
 function Invoke-AirpowerRun {
@@ -265,6 +265,7 @@ function CheckForUpdates {
 			$local = [Version]::new((Import-PowerShellDataFile -Path "$PSScriptRoot\Airpower.psd1").ModuleVersion)
 			if ($remote -gt $local) {
 				WriteHost "$([char]27)[92mA new version of Airpower is available! [v$remote]$([char]27)[0m"
+				WriteHost "$([char]27)[92mUse command ``Update-Module Airpower`` for the latest version$([char]27)[0m"
 			}
 		}
 	} catch {

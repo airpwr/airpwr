@@ -251,7 +251,7 @@ Describe 'CheckForUpdates' {
 		}
 		It 'Writes Host' {
 			CheckForUpdates
-			Should -Invoke -CommandName 'WriteHost' -Exactly -Times 1
+			Should -Invoke -CommandName 'WriteHost' -Exactly -Times 2
 		}
 	}
 }
