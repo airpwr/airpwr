@@ -55,11 +55,11 @@ function GetAirpowerPackageProvider {
 	} else {
 		'dockerhub'
 	}
-	$fn = Get-Item "function:AirpowerResolve${prov}Package"
+	$fn = Get-Item "function:AirpowerResolve${prov}Package" -ErrorAction SilentlyContinue
 	if ($fn) {
 		return $fn
 	}
-	$fn = Get-Item "function:$prov"
+	$fn = Get-Item "function:$prov" -ErrorAction SilentlyContinue
 	if ($fn) {
 		return $fn
 	}

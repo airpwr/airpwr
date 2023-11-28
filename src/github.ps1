@@ -104,41 +104,24 @@ function DownloadGitHubRelease {
 	$size
 }
 
-function ResolveGitHubPackage {
-	param (
-		[Parameter(Mandatory)]
-		[PSCustomObject]$PackageInfo,
-		[string]$Digest,
-		[string]$TagName
-	)
-	if ($Digest) {
-		return DownloadGitHubRelease -Digest $Digest -TagName $TagName -Compression $PackageInfo.compression -UrlFormat $PackageInfo.url -IncludeFiles $PackageInfo.files
-	} elseif ($PackageInfo.releases -and $TagName -eq 'latest') {
-		WriteHost "Retrieving latest release from https://github.com/$($PackageInfo.owner)/$($PackageInfo.repo)/releases/latest"
-		return GetGitHubLatestRelease -Owner $PackageInfo.owner -Repo $PackageInfo.repo
-	} else {
-		WriteHost "Retrieving tags from https://github.com/$($PackageInfo.owner)/$($PackageInfo.repo)"
-		return GetGitHubTags -Owner $PackageInfo.owner -Repo $PackageInfo.repo -TagName $TagName -TagPattern $PackageInfo.tag
-	}
-}
-
 function GetGitHubPackage {
 	param (
 		[Parameter(Mandatory)]
 		[string]$Package
 	)
 	if (-not $AirpowerGitHubPackages) {
+		# TODO: shipyard
 		$resp = HttpRequest 'https://raw.githubusercontent.com/airpwr/airpwr/gh-pkgs/src/github.json' -UserAgent (GetUserAgent) | HttpSend
 		if (-not $resp.IsSuccessStatusCode) {
 			throw "failed to retrieve github packages: $($resp.ReasonPhrase)"
 		}
-		$script:AirpowerGitHubPackages = $resp | GetJsonResponse
+		$script:AirpowerGitHubPackages = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
 	}
-	$ghpkg = $AirpowerGitHubPackages[$Package]
-	if (-not $ghpkg) {
+	$pkg = $AirpowerGitHubPackages.$Package
+	if (-not $pkg) {
 		throw "no github package: $Package"
 	}
-	return $ghpkg
+	return $pkg
 }
 
 function AirpowerResolveGitHubPackage {
@@ -148,5 +131,14 @@ function AirpowerResolveGitHubPackage {
 		[string]$TagName,
 		[string]$Digest
 	)
-	return ResolveGitHubPackage -PackageInfo (GetGitHubPackage $Package) -TagName $TagName -Digest $Digest
+	$pkg = (GetGitHubPackage $Package)
+	if ($Digest) {
+		return DownloadGitHubRelease -Digest $Digest -TagName $TagName -Compression $pkg.compression -UrlFormat $pkg.url -IncludeFiles $pkg.files
+	} elseif ($pkg.releases -and $TagName -eq 'latest') {
+		WriteHost "Retrieving latest release from https://github.com/$($pkg.owner)/$($pkg.repo)/releases/latest"
+		return GetGitHubLatestRelease -Owner $pkg.owner -Repo $pkg.repo
+	} else {
+		WriteHost "Retrieving tags from https://github.com/$($pkg.owner)/$($pkg.repo)"
+		return GetGitHubTags -Owner $pkg.owner -Repo $pkg.repo -TagName $TagName -TagPattern $pkg.tag
+	}
 }

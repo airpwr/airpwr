@@ -119,7 +119,7 @@ function ResolveRemotePackage {
 		[Collections.Hashtable]$Pkg
 	)
 	LoadConfig
-	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)"
+	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)" -ErrorAction SilentlyContinue
 	if (-not $fn) {
 		$fn = (GetAirpowerPackageProvider)
 	}
@@ -288,7 +288,7 @@ function PullPackage {
 			WriteHost "Status: Package is up to date for $ref"
 		} else {
 			if ($status -in 'new', 'newer') {
-				$Pkg.Size = & $fn $tag $digest
+				$Pkg.Size = & $fn $Pkg.Package $tag $digest
 				if ($Pkg.Size -le 0) {
 					throw "failed to retrieve: $ref"
 				}

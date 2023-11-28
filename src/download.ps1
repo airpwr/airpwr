@@ -66,7 +66,7 @@ function DownloadFile {
 		do {
 			$resp = GetChunk -StartByte $fs.Length @ArgumentList
 			if (-not $resp.IsSuccessStatusCode) {
-				throw "cannot download $($Digest): $($resp.ReasonPhrase)"
+				throw "cannot download ${Digest}: $($resp.ReasonPhrase)"
 			}
 			$h = $resp.Content.Headers
 			$size = if ($h.ContentRange.HasLength) { $h.ContentRange.Length } else { $h.ContentLength + $fs.Length }
