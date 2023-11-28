@@ -1,0 +1,107 @@
+{
+	"doxygen": {
+		"owner": "doxygen",
+		"repo": "doxygen",
+		"tag": "^Release_([0-9]+)_([0-9]+)_([0-9]+)$",
+		"releases": true,
+		"url": "https://www.doxygen.nl/files/doxygen-{0}.windows.x64.bin.zip",
+		"compression": "zip",
+		"files": ["doxygen.exe"]
+	},
+	"git": {
+		"owner": "git-for-windows",
+		"repo": "git",
+		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.windows\\.([0-9]+)$",
+		"releases": true,
+		"url": "https://github.com/git-for-windows/git/releases/download/v{1}.{2}.{3}.windows.{4}/PortableGit-{0}-64-bit.7z.exe",
+		"compression": "lzma",
+		"files": ["gitk.exe", "sed.exe", "curl.exe"]
+	},
+	"go": {
+		"owner": "golang",
+		"repo": "go",
+		"tag": "^go([0-9]+)\\.([0-9]+)\\.?([0-9]+)?$",
+		"url": "https://go.dev/dl/go{0}.windows-amd64.zip",
+		"compression": "zip",
+		"files": ["go.exe"]
+	},
+	"jom": {
+		"owner": "qt-labs",
+		"repo": "jom",
+		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"url": "http://qt.mirror.constant.com/official_releases/jom/jom_{0}.zip",
+		"compression": "zip",
+		"files": ["jom.exe"]
+	},
+	"llvm": {
+		"owner": "llvm",
+		"repo": "llvm-project",
+		"tag": "^llvmorg-([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"releases": true,
+		"url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-{0}/LLVM-{0}-win64.exe",
+		"compression": "lzma",
+		"files": ["clang.exe"]
+	},
+	"nasm": {
+		"owner": "netwide-assembler",
+		"repo": "nasm",
+		"tag": "^.*([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"url": "https://www.nasm.us/pub/nasm/releasebuilds/{0}/win64/nasm-{0}-win64.zip",
+		"compression": "zip",
+		"files": ["nasm.exe"]
+	},
+	"nats-server": {
+		"owner": "nats-io",
+		"repo": "nats-server",
+		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"releases": true,
+		"url": "https://github.com/nats-io/nats-server/releases/download/v{0}/nats-server-v{0}-windows-amd64.zip",
+		"compression": "zip",
+		"files": ["nats-server.exe"]
+	},
+	"ninja": {
+		"owner": "ninja-build",
+		"repo": "ninja",
+		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"releases": true,
+		"url": "https://github.com/ninja-build/ninja/releases/download/v{0}/ninja-win.zip",
+		"compression": "zip",
+		"files": ["ninja.exe"]
+	},
+	"node": {
+		"owner": "nodejs",
+		"repo": "node",
+		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"releases": true,
+		"url": "https://nodejs.org/dist/v{0}/node-v{0}-win-x64.zip",
+		"compression": "zip",
+		"files": ["node.exe"]
+	},
+	"powershell": {
+		"owner": "PowerShell",
+		"repo": "PowerShell",
+		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"releases": true,
+		"url": "https://github.com/PowerShell/PowerShell/releases/download/v{0}/PowerShell-{0}-win-x64.zip",
+		"compression": "zip",
+		"files": ["pwsh.exe"]
+	},
+	"vscode": {
+		"owner": "microsoft",
+		"repo": "vscode",
+		"tag": "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
+		"releases": true,
+		"url": "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-archive",
+		"compression": "zip",
+		"files": ["code.cmd"]
+	},
+	"zig": {
+		"owner": "ziglang",
+		"repo": "zig",
+		"tag": "^([0-9]+)\\.([0-9]+)\\.?([0-9]+)?$",
+		"releases": true,
+		"url": "https://ziglang.org/download/{0}/zig-windows-x86_64-{0}.zip",
+		"compression": "zip",
+		"files": ["zig.exe"]
+	}
+}

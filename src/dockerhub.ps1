@@ -129,8 +129,12 @@ function SavePackage {
 	}
 }
 
-function AirpowerDockerHubPull {
+function AirpowerResolveDockerHubPackage {
 	param (
+		[Parameter(Mandatory)]
+		[string]$Package,
+		[string]$TagName,
+		[string]$Digest
 	)
 	# TODO
 }

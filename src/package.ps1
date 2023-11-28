@@ -3,7 +3,8 @@
 . $PSScriptRoot\progress.ps1
 . $PSScriptRoot\log.ps1
 . $PSScriptRoot\db.ps1
-. $PSScriptRoot\pkg\all.ps1
+. $PSScriptRoot\dockerhub.ps1
+. $PSScriptRoot\github.ps1
 
 function AsRemotePackage {
 	param (
@@ -94,11 +95,8 @@ function ResolveRemotePackage {
 		[Collections.Hashtable]$Pkg
 	)
 	LoadConfig
-	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)"
-	if (-not $fn) {
-		throw "no such package: $($Pkg.Package)"
-	}
-	$tag, $digest = & $fn $Pkg.Tag
+	$fn = (GetAirpowerPackageProvider)
+	$tag, $digest = & $fn $Pkg.Package $Pkg.Tag
 	if ($tag -and $digest) {
 		return $fn, $tag, $digest
 	}

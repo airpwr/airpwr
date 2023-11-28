@@ -1,13 +1,16 @@
-function Expand7zipArchive {
+function ExpandLzma {
 	param (
 		[Parameter(Mandatory)]
 		[string]$File,
 		[Parameter(Mandatory)]
 		[string]$OutDir
 	)
-	$File, $OutDir | Out-Null
-	Invoke-AirpowerExec -Packages '7-zip:9.20' -ScriptBlock {
-		7za.exe x -o"$OutDir" $File | Out-Null
+	If (-not (Test-Path -Type Container $OutDir)) {
+		New-Item -Path $OutDir -ItemType Container
+	}
+	tar.exe --lzma -xf $File -C $OutDir
+	if ($LASTEXITCODE -ne 0) {
+		throw "failed to expand lzma archive $File"
 	}
 }
 
