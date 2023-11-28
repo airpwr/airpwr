@@ -121,7 +121,7 @@ function ResolveRemotePackage {
 	LoadConfig
 	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)" -ErrorAction SilentlyContinue
 	if (-not $fn) {
-		$fn = (GetAirpowerPackageProvider)
+		$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
 	}
 	$tag, $digest = & $fn $Pkg.Package $Pkg.Tag
 	if ($tag -and $digest) {

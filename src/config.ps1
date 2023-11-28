@@ -39,31 +39,22 @@ function GetAirpowerPullPolicy {
 	}
 }
 
+function GetAirpowerRemote {
+	if ($AirpowerRemote) {
+		$AirpowerRemote
+	} elseif ($env:AirpowerRemote) {
+		$env:AirpowerRemote
+	} else {
+		'dockerhub'
+	}
+}
+
 function GetAirpowerAutoprune {
 	if ($AirpowerAutoprune) {
 		$AirpowerAutoprune
 	} elseif ($env:AirpowerAutoprune) {
 		$env:AirpowerAutoprune
 	}
-}
-
-function GetAirpowerPackageProvider {
-	$prov = if ($AirpowerPackageProvider) {
-		$AirpowerPackageProvider
-	} elseif ($env:AirpowerPackageProvider) {
-		$env:AirpowerPackageProvider
-	} else {
-		'dockerhub'
-	}
-	$fn = Get-Item "function:AirpowerResolve${prov}Package" -ErrorAction SilentlyContinue
-	if ($fn) {
-		return $fn
-	}
-	$fn = Get-Item "function:$prov" -ErrorAction SilentlyContinue
-	if ($fn) {
-		return $fn
-	}
-	throw "failed to resolve package provider $prov"
 }
 
 function GetAirpowerAutoupdate {
