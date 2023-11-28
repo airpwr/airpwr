@@ -45,7 +45,8 @@ Command | Description
 -- | --
 [`version`](./doc/airpower-version.md) | Outputs the version of the module
 [`list`](./doc/airpower-list.md) | Outputs a list of installed packages
-[`remote`](./doc/airpower-remote.md) | Outputs an object of remote packages and versions
+[`remote`](./doc/airpower-remote.md) | Outputs the remote
+[`remote list`](./doc/airpower-remote-list.md) | Outputs information about the remote an object of remote packages and versions
 [`pull`](./doc/airpower-pull.md) | Downloads packages
 [`load`](./doc/airpower-load.md) | Loads packages into the PowerShell session
 [`exec`](./doc/airpower-exec.md) | Runs a user-defined scriptblock in a managed PowerShell session

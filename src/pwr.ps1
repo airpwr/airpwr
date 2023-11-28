@@ -213,11 +213,13 @@ function Invoke-AirpowerExec {
 function Invoke-AirpowerRemote {
 	[CmdletBinding()]
 	param (
-		[Parameter(Mandatory)]
-		[ValidateSet('list')]
+		[ValidateSet('', 'list')]
 		[string]$Command
 	)
 	switch ($Command) {
+		'' {
+			GetAirpowerRemote
+		}
 		'list' {
 			GetRemoteTags
 		}
