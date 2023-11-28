@@ -60,7 +60,7 @@ class FileLock {
 }
 
 class Db {
-	static [string]$Dir = (GetPwrDBPath)
+	static [string]$Dir = (GetPwrDbPath)
 
 	static Db() {
 		[Db]::Init()

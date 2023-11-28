@@ -47,7 +47,26 @@ function GetAirpowerAutoprune {
 	}
 }
 
-function GetPwrDBPath {
+function GetAirpowerPackageProvider {
+	$prov = if ($AirpowerPackageProvider) {
+		$AirpowerPackageProvider
+	} elseif ($env:AirpowerPackageProvider) {
+		$env:AirpowerPackageProvider
+	} else {
+		'dockerhub'
+	}
+	$fn = Get-Item "function:AirpowerResolve${prov}Package"
+	if ($fn) {
+		return $fn
+	}
+	$fn = Get-Item "function:$prov"
+	if ($fn) {
+		return $fn
+	}
+	throw "failed to resolve package provider $prov"
+}
+
+function GetPwrDbPath {
 	"$(GetAirpowerPath)\cache"
 }
 

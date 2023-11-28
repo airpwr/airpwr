@@ -66,9 +66,10 @@ function DownloadFile {
 		do {
 			$resp = GetChunk -StartByte $fs.Length @ArgumentList
 			if (-not $resp.IsSuccessStatusCode) {
-				throw "cannot download blob $($Digest): $($resp.ReasonPhrase)"
+				throw "cannot download $($Digest): $($resp.ReasonPhrase)"
 			}
-			$size = if ($resp.Content.Headers.ContentRange.HasLength) { $resp.Content.Headers.ContentRange.Length } else { $resp.Content.Headers.ContentLength + $fs.Length }
+			$h = $resp.Content.Headers
+			$size = if ($h.ContentRange.HasLength) { $h.ContentRange.Length } else { $h.ContentLength + $fs.Length }
 			$bytes += $size
 			$task = $resp.Content.CopyToAsync($fs)
 			while (-not $task.IsCompleted) {
