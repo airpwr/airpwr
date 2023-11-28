@@ -2,6 +2,8 @@
 
 Outputs a list of installed packages.
 
+Packages which display a non-sha256 hash are eligible to be updated via the `update` command
+
 When a displayed package has an empty tag, it is considered *orphaned* and eligible to be pruned via the `prune` command.
 
 ## Usage

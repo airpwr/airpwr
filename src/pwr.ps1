@@ -15,7 +15,7 @@ function Invoke-Airpower {
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory)]
-		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'exec', 'run', 'remove', 'rm', 'prune', 'help', 'h')]
+		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'exec', 'run', 'remove', 'rm', 'prune', 'update', 'help', 'h')]
 		[string]$Command,
 		[Parameter(ValueFromRemainingArguments)]
 		[object[]]$ArgumentList
@@ -47,6 +47,9 @@ function Invoke-Airpower {
 			}
 			'prune' {
 				Invoke-AirpowerPrune
+			}
+			'update' {
+				Invoke-AirpowerUpdate
 			}
 			{$_ -in 'remove', 'rm'} {
 				if ($PSVersionTable.PSVersion.Major -le 5) {
@@ -133,9 +136,7 @@ function Invoke-AirpowerLoad {
 	if (-not $Packages) {
 		Write-Error 'no packages provided'
 	}
-	foreach ($p in $Packages) {
-		$p | ResolvePackage | LoadPackage
-	}
+	TryEachPackage $Packages { $Input | ResolvePackage | LoadPackage } -ActionDescription 'load'
 }
 
 function Invoke-AirpowerRemove {
@@ -143,9 +144,13 @@ function Invoke-AirpowerRemove {
 	param (
 		[string[]]$Packages
 	)
-	foreach ($p in $Packages) {
-		$p | AsPackage | RemovePackage
-	}
+	TryEachPackage $Packages { $Input | AsPackage | RemovePackage } -ActionDescription 'remove'
+}
+
+function Invoke-AirpowerUpdate {
+	[CmdletBinding()]
+	param ()
+	UpdatePackages
 }
 
 function Invoke-AirpowerPrune {
@@ -165,9 +170,7 @@ function Invoke-AirpowerPull {
 	if (-not $Packages) {
 		Write-Error "no packages provided"
 	}
-	foreach ($p in $Packages) {
-		$p | AsPackage | PullPackage
-	}
+	TryEachPackage $Packages { $Input | AsPackage | PullPackage | Out-Null } -ActionDescription 'pull'
 }
 
 function Invoke-AirpowerRun {
@@ -203,10 +206,7 @@ function Invoke-AirpowerExec {
 	if (-not $Packages) {
 		Write-Error "no packages provided"
 	}
-	$resolved = @()
-	foreach ($p in $Packages) {
-		$resolved += $p | ResolvePackage
-	}
+	$resolved = TryEachPackage $Packages { $Input | ResolvePackage } -ActionDescription 'resolve'
 	ExecuteScript -ScriptBlock $ScriptBlock -Pkgs $resolved
 }
 
@@ -237,6 +237,7 @@ Commands:
   load           Loads packages into the PowerShell session
   exec           Runs a user-defined scriptblock in a managed PowerShell session
   run            Runs a user-defined scriptblock provided in a project file
+  update         Updates all tagged packages
   prune          Deletes unreferenced packages
   remove         Untags and deletes packages
   help           Outputs usage for this command
@@ -258,6 +259,7 @@ function CheckForUpdates {
 			$local = [Version]::new((Import-PowerShellDataFile -Path "$PSScriptRoot\Airpower.psd1").ModuleVersion)
 			if ($remote -gt $local) {
 				WriteHost "$([char]27)[92mA new version of Airpower is available! [v$remote]$([char]27)[0m"
+				WriteHost "$([char]27)[92mUse command ``Update-Module Airpower`` for the latest version$([char]27)[0m"
 			}
 		}
 	} catch {
@@ -273,6 +275,7 @@ Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
 	if ('Airpower.psm1' -eq (Split-Path $MyInvocation.ScriptName -Leaf)) {
 		# Invoked as a module
 		CheckForUpdates
+		UpdatePackages -Auto
 		PrunePackages -Auto
 	}
 }

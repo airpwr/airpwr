@@ -66,6 +66,14 @@ function GetAirpowerPackageProvider {
 	throw "failed to resolve package provider $prov"
 }
 
+function GetAirpowerAutoupdate {
+	if ($AirpowerAutoupdate) {
+		$AirpowerAutoupdate
+	} elseif ($env:AirpowerAutoupdate) {
+		$env:AirpowerAutoupdate
+	}
+}
+
 function GetPwrDbPath {
 	"$(GetAirpowerPath)\cache"
 }

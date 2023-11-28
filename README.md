@@ -25,6 +25,14 @@ Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
 
 See the [Airpower PS Gallery](https://www.powershellgallery.com/packages/Airpower) for other installation methods.
 
+# Updating
+
+Use this PowerShell command to update Airpower:
+
+```PowerShell
+Update-Module Airpower
+```
+
 # Usage
 
 Airpower is provided by the `Invoke-Airpower` commandlet. Several aliases are provided for ease-of-use: `airpower`, `air`, and `pwr`.
@@ -42,6 +50,7 @@ Command | Description
 [`load`](./doc/airpower-load.md) | Loads packages into the PowerShell session
 [`exec`](./doc/airpower-exec.md) | Runs a user-defined scriptblock in a managed PowerShell session
 [`run`](./doc/airpower-run.md) | Runs a user-defined scriptblock provided in a project file
+[`update`](./doc/airpower-update.md) | Updates all tagged packages
 [`prune`](./doc/airpower-prune.md) | Deletes unreferenced packages
 [`remove`](./doc/airpower-remove.md) | Untags and deletes packages
 [`help`](./doc/airpower-help.md) | Outputs usage for this command
@@ -68,11 +77,19 @@ The path determines where packages and metadata exist on a user's machine. It is
 
 > The default `AirpowerPath` is `"$env:LocalAppData\Airpower"`.
 
+### `AirpowerAutoupdate`
+
+The autoupdate determines if and how often the [update](./doc/airpower-update.md) action is taken. It is a [`[timespan]`](https://learn.microsoft.com/en-us/dotnet/api/system.timespan) but can be specified and parsed as a `[string]`. The autoupdate mechanism is evaluated upon initialization of the `airpower` module, meaning once per shell instance in which you use an `airpower` command.
+
+For example, if `AirpowerAutoupdate` is set to `'1.00:00:00'`, then update will only automatically execute for packages that were last updated at least one day ago.
+
+> The default `AirpowerAutoupdate` is `$null`
+
 ### `AirpowerAutoprune`
 
-The autoprune determines if and how often the [prune](./airpower-prune.md) action is taken. It is a [[timespan]](https://learn.microsoft.com/en-us/dotnet/api/system.timespan) but can be specified and parsed as a `[string]`. The autoprune mechanism is evaluated upon initialization of the `airpower` module, meaning once per shell instance in which you use an `airpower` command.
+The autoprune determines if and how often the [prune](./doc/airpower-prune.md) action is taken. It is a [`[timespan]`](https://learn.microsoft.com/en-us/dotnet/api/system.timespan) but can be specified and parsed as a `[string]`. The autoprune mechanism is evaluated upon initialization of the `airpower` module, meaning once per shell instance in which you use an `airpower` command.
 
-For example, if `AirpowerAutoprune` is set to `'1.00:00:00'`, then prune will execute at most once per day.
+For example, if `AirpowerAutoprune` is set to `'1.00:00:00'`, then prune will only automatically execute for packages that have been orphaned for at least one day.
 
 > The default `AirpowerAutoprune` is `$null`.
 
