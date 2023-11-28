@@ -136,7 +136,7 @@ function GetGitHubPackage {
 	}
 	$ghpkg = $AirpowerGitHubPackages[$Package]
 	if (-not $ghpkg) {
-		throw "no github package for $Package"
+		throw "no github package: $Package"
 	}
 	return $ghpkg
 }

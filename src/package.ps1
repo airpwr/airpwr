@@ -95,7 +95,10 @@ function ResolveRemotePackage {
 		[Collections.Hashtable]$Pkg
 	)
 	LoadConfig
-	$fn = (GetAirpowerPackageProvider)
+	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)"
+	if (-not $fn) {
+		$fn = (GetAirpowerPackageProvider)
+	}
 	$tag, $digest = & $fn $Pkg.Package $Pkg.Tag
 	if ($tag -and $digest) {
 		return $fn, $tag, $digest
