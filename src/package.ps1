@@ -188,7 +188,7 @@ function InstallPackage { # $locks, $status
 	$locks = @()
 	$mLock, $err = [Db]::TryLock(('metadatadb', $digest))
 	if ($err) {
-		throw "package '$digest' is in use by another airpower process"
+		throw "package '${name}:$digest' is in use by another airpower process"
 	}
 	$locks += $mLock
 	$pLock, $err = [Db]::TryLock(('pkgdb', $name, $tag))
@@ -306,6 +306,10 @@ function PullPackage {
 		if ($locks) {
 			$locks.Revert()
 		}
+	}
+	if (-not $m.Size -and [Db]::ContainsKey($k) -and ($m = [Db]::Get($k))) {
+		$m.Size = $Pkg.Size
+		[Db]::Put($k, $m)
 	}
 	return $status
 }
