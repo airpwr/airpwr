@@ -12,41 +12,48 @@ function GetGitHubTags {
 		[string]$TagName,
 		[string]$TagPattern
 	)
-	if ($TagName -and $TagName -ne 'latest') {
-		$resp = HttpRequest "https://api.github.com/repos/$Owner/$Repo/git/refs/tags/$TagName" -Accept 'application/vnd.github+json' -UserAgent (GetUserAgent) | HttpSend
-		if (-not $resp.IsSuccessStatusCode) {
-			throw "no tag $($TagName): $($resp.ReasonPhrase)"
-		}
-		$j = $resp | GetJsonResponse
-		return $TagName, $j.object.sha
-	}
 	$lock = [Db]::Lock(('remotedb', 'github', $Owner, $Repo))
 	try {
 		$pkgs = $lock.Get() | ConvertTo-HashTable
 		$tags = $pkgs.Tags
 		$digests = $pkgs.Digests
-		$count = 1
-		do {
-			$resp = HttpRequest "https://api.github.com/repos/$Owner/$Repo/tags?per_page=100&page=$count" -Accept 'application/vnd.github+json' -UserAgent (GetUserAgent) | HttpSend
-			if (-not $resp.IsSuccessStatusCode) {
-				throw "failed to retrieve tags: $($resp.ReasonPhrase)"
-			}
-			$page = $resp | GetJsonResponse
-			$count++
-			foreach ($p in $page) {
-				if ($p.name -match $TagPattern) {
-					$tag = $Matches[1]
-					for ($i = 2; $i -lt $Matches.Count; $i++) {
-						$tag += ".$($Matches[$i])"
-					}
-					if ($tag -in $pkgs.Tags) {
-						break
-					}
-					$tags += $tag
-					$digests += $p.commit.sha
+		if ($TagName -and $TagName -ne 'latest') {
+			$i = $tags.IndexOf($TagName)
+			if ($i -ge 0) {
+				return $TagName, $pkgs.Digests[$i]
+			} else {
+				$resp = HttpRequest "https://api.github.com/repos/$Owner/$Repo/git/refs/tags/$TagName" -Accept 'application/vnd.github+json' -UserAgent (GetUserAgent) | HttpSend
+				if (-not $resp.IsSuccessStatusCode) {
+					throw "no tag $($TagName): $($resp.ReasonPhrase)"
 				}
+				$j = $resp | GetJsonResponse
+				$digest = $j.object.sha
 			}
-		} while ($page.Count -gt 0)
+			$lock.Put(@{
+				Tags = $tags + @($TagName)
+				Digests = $digests + @($digest)
+			})
+			$lock.Unlock()
+			return $TagName, $digest
+		}
+		$resp = HttpRequest "https://api.github.com/repos/$Owner/$Repo/tags?per_page=100&page=1" -Accept 'application/vnd.github+json' -UserAgent (GetUserAgent) | HttpSend
+		if (-not $resp.IsSuccessStatusCode) {
+			throw "failed to retrieve tags: $($resp.ReasonPhrase)"
+		}
+		$page = $resp | GetJsonResponse
+		foreach ($p in $page) {
+			if ($p.name -match $TagPattern) {
+				$tag = $Matches[1]
+				for ($i = 2; $i -lt $Matches.Count; $i++) {
+					$tag += ".$($Matches[$i])"
+				}
+				if ($tag -in $pkgs.Tags) {
+					break
+				}
+				$tags += @($tag)
+				$digests += @($p.commit.sha)
+			}
+		}
 		$lock.Put(@{
 			Tags = $tags
 			Digests = $digests
@@ -55,7 +62,9 @@ function GetGitHubTags {
 		if (-not $TagName) {
 			$tags, $digests
 		} elseif ($TagName -eq 'latest') {
-			if ($tags.Count -gt 0) {
+			if (-not $tags) {
+				throw "no github tags found for $TagName"
+			} elseif ($tags.Count -gt 0) {
 				$latest = $tags[0], $digests[0]
 				for ($i = 1; $i -lt $tags.Count; $i += 1) {
 					$tag = $tags[$i]
@@ -119,20 +128,24 @@ function DownloadGitHubRelease {
 	$size
 }
 
-function GetGitHubPackage {
-	param (
-		[Parameter(Mandatory)]
-		[string]$Package
-	)
+function GetGitHubPackages {
 	if (-not $AirpowerGitHubPackages) {
-		# TODO: shipyard
+		# TODO: shipyard url
 		$resp = HttpRequest 'https://raw.githubusercontent.com/airpwr/airpwr/gh-pkgs/src/github.json' -UserAgent (GetUserAgent) | HttpSend
 		if (-not $resp.IsSuccessStatusCode) {
 			throw "failed to retrieve github packages: $($resp.ReasonPhrase)"
 		}
 		$script:AirpowerGitHubPackages = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
 	}
-	$pkg = $AirpowerGitHubPackages.$Package
+	$AirpowerGitHubPackages
+}
+
+function GetGitHubPackage {
+	param (
+		[Parameter(Mandatory)]
+		[string]$Package
+	)
+	$pkg = (GetGitHubPackages).$Package
 	if (-not $pkg) {
 		throw "no github package: $Package"
 	}
@@ -141,18 +154,30 @@ function GetGitHubPackage {
 
 function AirpowerResolveGitHubPackage {
 	param (
-		[Parameter(Mandatory)]
 		[string]$Package,
 		[string]$TagName,
 		[string]$Digest
 	)
-	$pkg = (GetGitHubPackage $Package)
-	if ($Digest) {
-		DownloadGitHubRelease -Digest $Digest -TagName $TagName -Compression $pkg.compression -UrlFormat $pkg.url -IncludeFiles $pkg.files
-	} elseif ($pkg.releases -and $TagName -eq 'latest') {
-		GetGitHubLatestRelease -Owner $pkg.owner -Repo $pkg.repo
+	if ($Package) {
+		$pkg = (GetGitHubPackage $Package)
+		if ($Digest) {
+			DownloadGitHubRelease -Digest $Digest -TagName $TagName -Compression $pkg.compression -UrlFormat $pkg.url -IncludeFiles $pkg.files
+		} elseif ($pkg.releases -and $TagName -eq 'latest') {
+			GetGitHubLatestRelease -Owner $pkg.owner -Repo $pkg.repo
+		} else {
+			WriteHost "Retrieving tags from https://github.com/$($pkg.owner)/$($pkg.repo)"
+			GetGitHubTags -Owner $pkg.owner -Repo $pkg.repo -TagName $TagName -TagPattern $pkg.tag
+		}
 	} else {
-		WriteHost "Retrieving tags from https://github.com/$($pkg.owner)/$($pkg.repo)"
-		GetGitHubTags -Owner $pkg.owner -Repo $pkg.repo -TagName $TagName -TagPattern $pkg.tag
+		$pkgs = @()
+		foreach ($pkg in (GetGitHubPackages).PSObject.Properties) {
+			$tags, $digests = GetGitHubTags -Owner $pkg.Value.owner -Repo $pkg.Value.repo -TagPattern $pkg.Value.tag
+			$pkgs += @{
+				Package = $pkg.Name
+				Tags = $tags
+				Digests = $digests
+			}
+		}
+		$pkgs
 	}
 }

@@ -45,10 +45,13 @@ function AsTagString {
 }
 
 function GetRemotePackages {
-	$remote = @{}
-	foreach ($tag in (GetTagsList).Tags) {
-		$pkg = $tag | AsRemotePackage
-		$remote.$($pkg.Package) = $remote.$($pkg.Package) + @($pkg.Tag)
+	$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
+	$pkgs = & $fn
+	$remote = [hashtable]@{}
+	foreach ($pkg in $pkgs) {
+		foreach ($tag in $pkg.Tags) {
+			$remote.$($pkg.Package) += @($tag)
+		}
 	}
 	$remote
 }
@@ -56,7 +59,7 @@ function GetRemotePackages {
 function GetRemoteTags {
 	$remote = GetRemotePackages
 	$o = New-Object PSObject
-	foreach ($k in $remote.keys | Sort-Object) {
+	foreach ($k in $remote.Keys | Sort-Object) {
 		$arr = @()
 		foreach ($t in $remote.$k) {
 			$arr += [Tag]::new(($t | AsTagString))
@@ -575,14 +578,14 @@ class Tag : IComparable {
 			$this.Latest = $true
 			return
 		}
-		if ($tag -match '^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?(?:(?:\+|_)([0-9]+))?$') {
+		if ($tag -match '^([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?(?:[+_.]([0-9]+))?$') {
 			$this.Major = $Matches[1]
 			$this.Minor = $Matches[2]
 			$this.Patch = $Matches[3]
 			$this.Build = $Matches[4]
 			return
 		}
-		throw "failed to parse tag: $tag"
+		throw "failed to parse tag: '$tag'"
 	}
 
 	[int] CompareTo([object]$Obj) {
