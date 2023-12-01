@@ -1,5 +1,5 @@
 if (-not (Test-Path "$PSScriptRoot\pwr" -Type Container)) {
-New-Item "$PSScriptRoot\pwr" -Type Container | Out-Null
+	New-Item "$PSScriptRoot\pwr" -Type Container | Out-Null
 }
 $env:AirpowerPath = "$PSScriptRoot\pwr"
 

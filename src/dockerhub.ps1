@@ -4,6 +4,20 @@
 . $PSScriptRoot\progress.ps1
 . $PSScriptRoot\tar.ps1
 
+function AsRemotePackage {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[string]$RegistryTag
+	)
+	if ($RegistryTag -match '(.*)-([0-9].+)') {
+		return @{
+			Package = $Matches[1]
+			Tag = if ($Matches[2] -in 'latest', '', $null) { 'latest' } else { $Matches[2] }
+		}
+	}
+	throw "failed to parse registry tag: '$RegistryTag'"
+}
+
 function GetDockerRepo {
 	'airpower/shipyard'
 }
@@ -131,16 +145,23 @@ function SavePackage {
 
 function AirpowerResolveDockerHubPackage {
 	param (
-		[Parameter(Mandatory)]
 		[string]$Package,
 		[string]$TagName,
 		[string]$Digest
 	)
-	# TODO
-}
-
-function AirpowerDockerHubPackage {
-	param (
-	)
-	# TODO
+	if ($Package) {
+	} else {
+		$pkgs = [hashtable]@{}
+		foreach ($tag in (GetTagsList).tags) {
+			$pkg = $tag | AsRemotePackage
+			if (-not $pkgs.Contains($pkg.Package)) {
+				$pkgs.$($pkg.Package) = @{
+					Package = $pkg.Package
+					Tags = @()
+				}
+			}
+			$pkgs.$($pkg.Package).Tags += @($pkg.Tag)
+		}
+		$pkgs.Values
+	}
 }

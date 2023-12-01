@@ -6,20 +6,6 @@
 . $PSScriptRoot\dockerhub.ps1
 . $PSScriptRoot\github.ps1
 
-function AsRemotePackage {
-	param (
-		[Parameter(Mandatory, ValueFromPipeline)]
-		[string]$RegistryTag
-	)
-	if ($RegistryTag -match '(.*)-([0-9].+)') {
-		return @{
-			Package = $Matches[1]
-			Tag = if ($Matches[2] -in 'latest', '', $null) { 'latest' } else { $Matches[2] }
-		}
-	}
-	throw "failed to parse registry tag: $RegistryTag"
-}
-
 function AsTagString {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
@@ -49,9 +35,7 @@ function GetRemotePackages {
 	$pkgs = & $fn
 	$remote = [hashtable]@{}
 	foreach ($pkg in $pkgs) {
-		foreach ($tag in $pkg.Tags) {
-			$remote.$($pkg.Package) += @($tag)
-		}
+		$remote.$($pkg.Package) += $pkg.Tags
 	}
 	$remote
 }
