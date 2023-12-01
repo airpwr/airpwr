@@ -28,13 +28,12 @@ function GetDockerRepo {
 
 function GetAuthToken {
 	$auth = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$(GetDockerRepo):pull"
-	$resp = HttpRequest $auth | HttpSend | GetJsonResponse
-	return $resp.Token
+	(HttpRequest $auth | HttpSend | GetJsonResponse).Token
 }
 
 function GetTagsList {
 	$endpoint = "$(GetDockerRegistry)/$(GetDockerRepo)/tags/list"
-	return HttpRequest $endpoint -AuthToken (GetAuthToken) | HttpSend | GetJsonResponse
+	HttpRequest $endpoint -AuthToken (GetAuthToken) | HttpSend | GetJsonResponse
 }
 
 function GetManifest {
@@ -47,7 +46,7 @@ function GetManifest {
 		AuthToken = (GetAuthToken)
 		Accept = 'application/vnd.docker.distribution.manifest.v2+json'
 	}
-	return HttpRequest @params | HttpSend
+	HttpRequest @params | HttpSend
 }
 
 function GetDigestForRef {
@@ -61,7 +60,7 @@ function GetDigestForRef {
 		Accept = 'application/vnd.docker.distribution.manifest.v2+json'
 		Method = 'HEAD'
 	}
-	return HttpRequest @params | HttpSend | GetDigest
+	HttpRequest @params | HttpSend | GetDigest
 }
 
 function GetDigest {
@@ -69,7 +68,7 @@ function GetDigest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
-	return $resp.Headers.GetValues('docker-content-digest')
+	$resp.Headers.GetValues('docker-content-digest')
 }
 
 function DebugRateLimit {
