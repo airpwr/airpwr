@@ -210,8 +210,10 @@ function Invoke-AirpowerExec {
 function Invoke-AirpowerRemote {
 	[CmdletBinding()]
 	param (
-		[ValidateSet('', 'list')]
-		[string]$Command
+		[ValidateSet('', 'list', 'set')]
+		[string]$Command,
+		[ValidateScript({ $Command -eq 'set' })]
+		[string]$Remote
 	)
 	switch ($Command) {
 		'' {
@@ -219,6 +221,9 @@ function Invoke-AirpowerRemote {
 		}
 		'list' {
 			GetRemoteTags
+		}
+		'set' {
+			SetAirpowerRemote $Remote
 		}
 	}
 }

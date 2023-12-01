@@ -30,25 +30,16 @@ function AsTagString {
 	$Tag
 }
 
-function GetRemotePackages {
+function GetRemoteTags {
 	$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
 	$pkgs = & $fn
-	$remote = [hashtable]@{}
-	foreach ($pkg in $pkgs) {
-		$remote.$($pkg.Package) += $pkg.Tags
-	}
-	$remote
-}
-
-function GetRemoteTags {
-	$remote = GetRemotePackages
 	$o = New-Object PSObject
-	foreach ($k in $remote.Keys | Sort-Object) {
-		$arr = @()
-		foreach ($t in $remote.$k) {
-			$arr += [Tag]::new(($t | AsTagString))
+	foreach ($k in $pkgs.Keys | Sort-Object) {
+		$tags = @()
+		foreach ($tag in $pkgs.$k) {
+			$tags += [Tag]::new(($tag | AsTagString))
 		}
-		$o | Add-Member -MemberType NoteProperty -Name $k -Value ($arr | Sort-Object -Descending)
+		$o | Add-Member -MemberType NoteProperty -Name $k -Value ($tags | Sort-Object -Descending)
 	}
 	$o
 }
@@ -569,7 +560,7 @@ class Tag : IComparable {
 			$this.Build = $Matches[4]
 			return
 		}
-		throw "failed to parse tag: '$tag'"
+		throw "failed to parse tag: $tag"
 	}
 
 	[int] CompareTo([object]$Obj) {

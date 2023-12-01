@@ -47,6 +47,7 @@ Command | Description
 [`list`](./doc/airpower-list.md) | Outputs a list of installed packages
 [`remote`](./doc/airpower-remote.md) | Outputs the remote
 [`remote list`](./doc/airpower-remote-list.md) | Outputs information about the remote an object of remote packages and versions
+[`remote set`](./doc/airpower-remote-set.md) | Sets the remote
 [`pull`](./doc/airpower-pull.md) | Downloads packages
 [`load`](./doc/airpower-load.md) | Loads packages into the PowerShell session
 [`exec`](./doc/airpower-exec.md) | Runs a user-defined scriptblock in a managed PowerShell session
@@ -77,6 +78,12 @@ The pull policy determines when a package is downloaded, or pulled, from the ups
 The path determines where packages and metadata exist on a user's machine. It is a `[string]`.
 
 > The default `AirpowerPath` is `"$env:LocalAppData\Airpower"`.
+
+### `AirpowerRemote`
+
+The remote determines where packages are pulled from. The variable takes precedence over the `airpower remote set` command. It is a `[string]`.
+
+> The default `AirpowerRemote` is `"dockerhub"`.
 
 ### `AirpowerAutoupdate`
 

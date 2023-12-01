@@ -45,7 +45,27 @@ function GetAirpowerRemote {
 	} elseif ($env:AirpowerRemote) {
 		$env:AirpowerRemote
 	} else {
-		'dockerhub'
+		$k = 'remotedb', 'remote'
+		if ([Db]::ContainsKey($k) -and ($r = [Db]::Get($k))) {
+			[string]$r
+		} else {
+			'dockerhub'
+		}
+	}
+}
+
+function SetAirpowerRemote {
+	param (
+		[string]$Remote
+	)
+	$k = 'remotedb', 'remote'
+	if ($Remote) {
+		if (-not (Get-Item "function:AirpowerResolve${Remote}Package" -ErrorAction SilentlyContinue)) {
+			Write-Warning "airpower remote '$Remote' could not be resolved"
+		}
+		[Db]::Put($k, $Remote)
+	} else {
+		[Db]::Remove($k)
 	}
 }
 

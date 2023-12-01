@@ -15,7 +15,11 @@ function AsRemotePackage {
 			Tag = if ($Matches[2] -in 'latest', '', $null) { 'latest' } else { $Matches[2] }
 		}
 	}
-	throw "failed to parse registry tag: '$RegistryTag'"
+	throw "failed to parse registry tag: $RegistryTag"
+}
+
+function GetDockerRegistry {
+	'https://index.docker.io/v2'
 }
 
 function GetDockerRepo {
@@ -29,7 +33,7 @@ function GetAuthToken {
 }
 
 function GetTagsList {
-	$endpoint = "https://index.docker.io/v2/$(GetDockerRepo)/tags/list"
+	$endpoint = "$(GetDockerRegistry)/$(GetDockerRepo)/tags/list"
 	return HttpRequest $endpoint -AuthToken (GetAuthToken) | HttpSend | GetJsonResponse
 }
 
@@ -39,7 +43,7 @@ function GetManifest {
 		[string]$Ref
 	)
 	$params = @{
-		Url = "https://index.docker.io/v2/$(GetDockerRepo)/manifests/$Ref"
+		Url = "$(GetDockerRegistry)/$(GetDockerRepo)/manifests/$Ref"
 		AuthToken = (GetAuthToken)
 		Accept = 'application/vnd.docker.distribution.manifest.v2+json'
 	}
@@ -52,7 +56,7 @@ function GetDigestForRef {
 		[string]$Ref
 	)
 	$params = @{
-		Url = "https://index.docker.io/v2/$(GetDockerRepo)/manifests/$Ref"
+		Url = "$(GetDockerRegistry)/$(GetDockerRepo)/manifests/$Ref"
 		AuthToken = (GetAuthToken)
 		Accept = 'application/vnd.docker.distribution.manifest.v2+json'
 		Method = 'HEAD'
@@ -123,7 +127,7 @@ function SavePackage {
 		$bytes = 0
 		foreach ($layer in $layers) {
 			try {
-				$url = "https://index.docker.io/v2/$(GetDockerRepo)/blobs/$($layer.Digest)"
+				$url = "$(GetDockerRegistry)/$(GetDockerRepo)/blobs/$($layer.Digest)"
 				$auth = (GetAuthToken)
 				$accept = 'application/octet-stream'
 				$file, $size = $layer.Digest | DownloadFile -Extension 'tar.gz' -ArgumentList $url $auth $accept | ExtractTarGz -Digest $digest
@@ -154,14 +158,8 @@ function AirpowerResolveDockerHubPackage {
 		$pkgs = [hashtable]@{}
 		foreach ($tag in (GetTagsList).tags) {
 			$pkg = $tag | AsRemotePackage
-			if (-not $pkgs.Contains($pkg.Package)) {
-				$pkgs.$($pkg.Package) = @{
-					Package = $pkg.Package
-					Tags = @()
-				}
-			}
-			$pkgs.$($pkg.Package).Tags += @($pkg.Tag)
+			$pkgs.$($pkg.Package) += @($pkg.Tag)
 		}
-		$pkgs.Values
+		$pkgs
 	}
 }

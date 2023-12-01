@@ -169,14 +169,10 @@ function AirpowerResolveGitHubPackage {
 			GetGitHubTags -Owner $pkg.owner -Repo $pkg.repo -TagName $TagName -TagPattern $pkg.tag
 		}
 	} else {
-		$pkgs = @()
+		$pkgs = [hashtable]@{}
 		foreach ($pkg in (GetGitHubPackages).PSObject.Properties) {
 			$tags, $digests = GetGitHubTags -Owner $pkg.Value.owner -Repo $pkg.Value.repo -TagPattern $pkg.Value.tag
-			$pkgs += @{
-				Package = $pkg.Name
-				Tags = $tags
-				Digests = $digests
-			}
+			$pkgs.$($pkg.Name) = $tags
 		}
 		$pkgs
 	}
