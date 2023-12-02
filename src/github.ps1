@@ -117,19 +117,18 @@ function DownloadGitHubRelease {
 		[Parameter(Mandatory)]
 		[ValidateSet('zip', 'lzma')]
 		[string]$Compression,
-		[string[]]$IncludeFiles
+		[Parameter(Mandatory)]
+		[string]$Path
 	)
 	$major, $minor, $build, $rev = AsVersion $Tag
 	$url = [string]::Format($UrlFormat, $Tag, $major, $minor, $build, $rev)
 	try {
 		$file, $size = $Digest | DownloadFile -Extension $Compression -ArgumentList $url
-		$pkgpath = $Digest | ResolvePackagePath
 		if ($Compression -eq 'lzma') {
-			ExpandLzmaArchive -File $file -OutDir $pkgpath
+			ExpandLzmaArchive -File $file -OutDir $Path
 		} else {
-			Expand-Archive $file $pkgpath
+			Expand-Archive $file $Path
 		}
-		WritePwr -Path $pkgpath -IncludeFiles $IncludeFiles
 		[long]$size
 	} finally {
 		if ($file -and (Test-Path $file -PathType Leaf)) {
@@ -187,15 +186,18 @@ function AirpowerResolveGitHubDigest {
 	}
 }
 
-function AirpowerResolveGitHubPackage {
+function AirpowerResolveGitHubDownload {
 	param (
 		[Parameter(Mandatory)]
 		[string]$Package,
 		[Parameter(Mandatory)]
 		[string]$Tag,
 		[Parameter(Mandatory)]
-		[string]$Digest
+		[string]$Digest,
+		[Parameter(Mandatory)]
+		[string]$Path
 	)
 	$pkg = (GetGitHubPackage $Package)
-	DownloadGitHubRelease -Digest $Digest -Tag $Tag -Compression $pkg.compression -UrlFormat $pkg.url -IncludeFiles $pkg.files
+	$size = DownloadGitHubRelease -Digest $Digest -Tag $Tag -Compression $pkg.compression -UrlFormat $pkg.url -Path $Path
+	$size, $pkg.files
 }

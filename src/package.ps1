@@ -99,10 +99,12 @@ function ResolveRemotePackage {
 	)
 	LoadConfig
 	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)Digest" -ErrorAction SilentlyContinue
-	if (-not $fn) {
+	[string]$tag, [string]$digest = if ($fn) {
+		& $fn $Pkg.Tag
+	} else {
 		$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Digest"
+		& $fn $Pkg.Package $Pkg.Tag
 	}
-	[string]$tag, [string]$digest = & $fn $Pkg.Package $Pkg.Tag
 	if ($tag -and $digest) {
 		return $tag, $digest
 	}
@@ -266,14 +268,20 @@ function PullPackage {
 		if ($status -eq 'uptodate') {
 			WriteHost "Status: Package is up to date for $ref"
 		} else {
+			$path = $digest | ResolvePackagePath
 			if ($status -in 'new', 'newer') {
-				$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)Package" -ErrorAction SilentlyContinue
-				if (-not $fn) {
-					$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
+				$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)Download" -ErrorAction SilentlyContinue
+				[long]$size, [string[]]$files = if ($fn) {
+					& $fn $tag $digest $path
+				} else {
+					$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Download"
+					& $fn $Pkg.Package $tag $digest $path
 				}
-				[long]$size = & $fn $Pkg.Package $tag $digest
 				if ($size -le 0) {
 					throw "failed to retrieve: $ref"
+				}
+				if ($files) {
+					WritePwr -Path $path -IncludeFiles $files
 				}
 				$Pkg.Size = $size
 			}
@@ -282,7 +290,7 @@ function PullPackage {
 			if (Test-Path -Path $refpath -PathType Container) {
 				[IO.Directory]::Delete($refpath)
 			}
-			New-Item $refpath -ItemType Junction -Target ($Pkg.Digest | ResolvePackagePath) | Out-Null
+			New-Item $refpath -ItemType Junction -Target $path | Out-Null
 			"Status: Downloaded newer package for $ref ($($Pkg.Size | AsByteString))" + ' ' * 20 + "`n" | WriteConsole
 		}
 		$locks.Unlock()

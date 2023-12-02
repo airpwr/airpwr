@@ -190,7 +190,7 @@ function AirpowerResolveDockerHubDigest {
 	throw "found no tags for ${Package}:$TagName in $(GetDockerRegistry)/$(GetDockerRepo)"
 }
 
-function AirpowerResolveDockerHubPackage {
+function AirpowerResolveDockerHubDownload {
 	param (
 		[Parameter(Mandatory)]
 		[string]$Package,
