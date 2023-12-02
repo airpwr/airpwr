@@ -68,7 +68,7 @@ function GetDigest {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
-	$resp.Headers.GetValues('docker-content-digest')
+	$Resp.Headers.GetValues('docker-content-digest')
 }
 
 function DebugRateLimit {
@@ -76,12 +76,13 @@ function DebugRateLimit {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
-	if ($resp.Headers.Contains('ratelimit-limit')) {
-		Write-Debug "DockerHub RateLimit = $($resp.Headers.GetValues('ratelimit-limit'))"
+	if ($Resp.Headers.Contains('ratelimit-limit')) {
+		Write-Debug "DockerHub RateLimit = $($Resp.Headers.GetValues('ratelimit-limit'))"
 	}
-	if ($resp.Headers.Contains('ratelimit-remaining')) {
-		Write-Debug "DockerHub Remaining = $($resp.Headers.GetValues('ratelimit-remaining'))"
+	if ($Resp.Headers.Contains('ratelimit-remaining')) {
+		Write-Debug "DockerHub Remaining = $($Resp.Headers.GetValues('ratelimit-remaining'))"
 	}
+	$Resp
 }
 
 function GetPackageLayers {
@@ -129,7 +130,7 @@ function SavePackage {
 				$url = "$(GetDockerRegistry)/$(GetDockerRepo)/blobs/$($layer.Digest)"
 				$auth = (GetAuthToken)
 				$accept = 'application/octet-stream'
-				$file, $size = $layer.Digest | DownloadFile -Extension 'tar.gz' -ArgumentList $url $auth $accept | ExtractTarGz -Digest $digest
+				$file, $size = $layer.Digest | DownloadFile -Extension 'tar.gz' -ArgumentList $url, $auth, $accept | ExtractTarGz -Digest $digest
 				"$($layer.Digest | AsDigestString): Pull complete" + ' ' * 60 | WriteConsole
 				$files += $file
 				$bytes += $size
@@ -146,19 +147,57 @@ function SavePackage {
 	}
 }
 
-function AirpowerResolveDockerHubPackage {
+function AirpowerResolveDockerHubTags {
+	$pkgs = [hashtable]@{}
+	foreach ($tag in (GetTagsList).tags) {
+		$pkg = $tag | AsRemotePackage
+		$pkgs.$($pkg.Package) += @($pkg.Tag)
+	}
+	$pkgs
+}
+
+function AirpowerResolveDockerHubDigest {
 	param (
+		[Parameter(Mandatory)]
 		[string]$Package,
-		[string]$TagName,
-		[string]$Digest
+		[Parameter(Mandatory)]
+		[string]$TagName
 	)
-	if ($Package) {
-	} else {
-		$pkgs = [hashtable]@{}
+	WriteHost "Retrieving tags from $(GetDockerRegistry)/$(GetDockerRepo)"
+	if ($TagName -ne 'latest') {
 		foreach ($tag in (GetTagsList).tags) {
 			$pkg = $tag | AsRemotePackage
-			$pkgs.$($pkg.Package) += @($pkg.Tag)
+			if ($pkg.Package -eq $Package -and $pkg.Tag -eq $TagName) {
+				return $tag | GetDigestForRef
+			}
 		}
-		$pkgs
+	} else {
+		foreach ($tag in (GetTagsList).tags) {
+			$pkg = $tag | AsRemotePackage
+			$pkgtag = [Tag]::new($pkg.Tag)
+			if ($pkg.Package -eq $Package -and (-not $latest -or $latest.Tag -lt $pkgtag)) {
+				$latest = @{
+					RegistryTag = $tag
+					Tag = $pkgtag
+				}
+			}
+		}
+		if ($latest) {
+			$digest = ($latest.RegistryTag | GetDigestForRef).Substring(7)
+			return $latest.Tag.ToString(), $digest
+		}
 	}
+	throw "found no tags for ${Package}:$TagName in $(GetDockerRegistry)/$(GetDockerRepo)"
+}
+
+function AirpowerResolveDockerHubPackage {
+	param (
+		[Parameter(Mandatory)]
+		[string]$Package,
+		[Parameter(Mandatory)]
+		[string]$Tag,
+		[Parameter(Mandatory)]
+		[string]$Digest
+	)
+	"$Package-$Tag" | GetManifest | DebugRateLimit | SavePackage
 }

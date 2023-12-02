@@ -31,7 +31,7 @@ function AsTagString {
 }
 
 function GetRemoteTags {
-	$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
+	$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Tags"
 	$pkgs = & $fn
 	$o = New-Object PSObject
 	foreach ($k in $pkgs.Keys | Sort-Object) {
@@ -74,6 +74,7 @@ function TryEachPackage {
 			$results += $p | &$ScriptBlock
 		} catch {
 			Write-Error $_
+			Write-Error $_.InvocationInfo.PositionMessage
 			$failures += $p
 		}
 	}
@@ -97,13 +98,13 @@ function ResolveRemotePackage {
 		[Collections.Hashtable]$Pkg
 	)
 	LoadConfig
-	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)" -ErrorAction SilentlyContinue
+	$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)Digest" -ErrorAction SilentlyContinue
 	if (-not $fn) {
-		$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
+		$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Digest"
 	}
 	$tag, $digest = & $fn $Pkg.Package $Pkg.Tag
 	if ($tag -and $digest) {
-		return $fn, $tag, $digest
+		return $tag, $digest
 	}
 	throw "no such $($Pkg.Package) tag: $($Pkg.Tag)"
 }
@@ -252,7 +253,7 @@ function PullPackage {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Collections.Hashtable]$Pkg
 	)
-	$fn, $tag, $digest = $Pkg | ResolveRemotePackage
+	$tag, $digest = $Pkg | ResolveRemotePackage
 	WriteHost "Pulling $($Pkg.Package):$($Pkg.Tag | AsTagString) ($tag) $digest"
 	$k = 'metadatadb', $digest
 	if ([Db]::ContainsKey($k) -and ($m = [Db]::Get($k)) -and $m.Size) {
@@ -266,6 +267,10 @@ function PullPackage {
 			WriteHost "Status: Package is up to date for $ref"
 		} else {
 			if ($status -in 'new', 'newer') {
+				$fn = Get-Item "function:AirpowerPackage$($Pkg.Package)Package" -ErrorAction SilentlyContinue
+				if (-not $fn) {
+					$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
+				}
 				$Pkg.Size = & $fn $Pkg.Package $tag $digest
 				if ($Pkg.Size -le 0) {
 					throw "failed to retrieve: $ref"

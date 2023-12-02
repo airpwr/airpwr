@@ -4,7 +4,7 @@
 		"repo": "doxygen",
 		"tag": "^Release_([0-9]+)_([0-9]+)_([0-9]+)$",
 		"releases": true,
-		"url": "https://github.com/doxygen/doxygen/releases/download/{0}/doxygen-{1}.{2}.{3}.windows.x64.bin.zip",
+		"url": "https://github.com/doxygen/doxygen/releases/download/Release_{1}_{2}_{3}/doxygen-{0}.windows.x64.bin.zip",
 		"compression": "zip",
 		"files": ["doxygen.exe"]
 	},
@@ -13,7 +13,7 @@
 		"repo": "git",
 		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.windows\\.([0-9]+)$",
 		"releases": true,
-		"url": "https://github.com/git-for-windows/git/releases/download/{0}/PortableGit-{0}-64-bit.7z.exe",
+		"url": "https://github.com/git-for-windows/git/releases/download/v{1}.{2}.{3}.windows.{4}/PortableGit-{0}-64-bit.7z.exe",
 		"compression": "lzma",
 		"files": ["gitk.exe", "sed.exe", "curl.exe"]
 	},
@@ -21,7 +21,7 @@
 		"owner": "golang",
 		"repo": "go",
 		"tag": "^go([0-9]+)\\.([0-9]+)\\.?([0-9]+)?$",
-		"url": "https://go.dev/dl/{0}.windows-amd64.zip",
+		"url": "https://go.dev/dl/go{0}.windows-amd64.zip",
 		"compression": "zip",
 		"files": ["go.exe"]
 	},
@@ -38,7 +38,7 @@
 		"repo": "llvm-project",
 		"tag": "^llvmorg-([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
 		"releases": true,
-		"url": "https://github.com/llvm/llvm-project/releases/download/{0}/LLVM-{1}.{2}.{3}-win64.exe",
+		"url": "https://github.com/llvm/llvm-project/releases/download/llvmorg-{0}/LLVM-{0}-win64.exe",
 		"compression": "lzma",
 		"files": ["clang.exe"]
 	},
@@ -46,7 +46,7 @@
 		"owner": "netwide-assembler",
 		"repo": "nasm",
 		"tag": "^nasm-([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
-		"url": "https://www.nasm.us/pub/nasm/releasebuilds/{1}.{2}.{3}/win64/{0}-win64.zip",
+		"url": "https://www.nasm.us/pub/nasm/releasebuilds/{0}/win64/nasm-{0}-win64.zip",
 		"compression": "zip",
 		"files": ["nasm.exe"]
 	},
@@ -55,7 +55,7 @@
 		"repo": "nats-server",
 		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
 		"releases": true,
-		"url": "https://github.com/nats-io/nats-server/releases/download/{0}/nats-server-{0}-windows-amd64.zip",
+		"url": "https://github.com/nats-io/nats-server/releases/download/v{0}/nats-server-v{0}-windows-amd64.zip",
 		"compression": "zip",
 		"files": ["nats-server.exe"]
 	},
@@ -64,7 +64,7 @@
 		"repo": "ninja",
 		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
 		"releases": true,
-		"url": "https://github.com/ninja-build/ninja/releases/download/{0}/ninja-win.zip",
+		"url": "https://github.com/ninja-build/ninja/releases/download/v{0}/ninja-win.zip",
 		"compression": "zip",
 		"files": ["ninja.exe"]
 	},
@@ -73,7 +73,7 @@
 		"repo": "node",
 		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
 		"releases": true,
-		"url": "https://nodejs.org/dist/{0}/node-{0}-win-x64.zip",
+		"url": "https://nodejs.org/dist/v{0}/node-v{0}-win-x64.zip",
 		"compression": "zip",
 		"files": ["node.exe"]
 	},
@@ -82,7 +82,7 @@
 		"repo": "PowerShell",
 		"tag": "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
 		"releases": true,
-		"url": "https://github.com/PowerShell/PowerShell/releases/download/{0}/PowerShell-{1}.{2}.{3}-win-x64.zip",
+		"url": "https://github.com/PowerShell/PowerShell/releases/download/v{0}/PowerShell-{0}-win-x64.zip",
 		"compression": "zip",
 		"files": ["pwsh.exe"]
 	},

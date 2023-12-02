@@ -60,7 +60,7 @@ function SetAirpowerRemote {
 	)
 	$k = 'remotedb', 'remote'
 	if ($Remote) {
-		if (-not (Get-Item "function:AirpowerResolve${Remote}Package" -ErrorAction SilentlyContinue)) {
+		if (-not (Get-Item "function:AirpowerResolve${Remote}Tags" -ErrorAction SilentlyContinue) -or -not (Get-Item "function:AirpowerResolve${Remote}Digest" -ErrorAction SilentlyContinue) -or -not (Get-Item "function:AirpowerResolve${Remote}Package" -ErrorAction SilentlyContinue)) {
 			Write-Warning "airpower remote '$Remote' could not be resolved"
 		}
 		[Db]::Put($k, $Remote)
