@@ -130,12 +130,12 @@ function DownloadGitHubRelease {
 			Expand-Archive $file $pkgpath
 		}
 		WritePwr -Path $pkgpath -IncludeFiles $IncludeFiles
+		[long]$size
 	} finally {
 		if ($file -and (Test-Path $file -PathType Leaf)) {
 			[IO.File]::Delete($file)
 		}
 	}
-	$size
 }
 
 function GetGitHubPackages {

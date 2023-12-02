@@ -91,13 +91,11 @@ function GetPackageLayers {
 		[Net.Http.HttpResponseMessage]$Resp
 	)
 	$layers = ($Resp | GetJsonResponse).layers
-	$packageLayers = [System.Collections.Generic.List[PSObject]]::new()
 	for ($i = 0; $i -lt $layers.Length; $i++) {
 		if ($layers[$i].mediaType -eq 'application/vnd.docker.image.rootfs.diff.tar.gzip' -and ($i -gt 0 -or $layer.length -eq 1)) {
-			$packageLayers.Add($layers[$i])
+			$layers[$i]
 		}
 	}
-	$packageLayers
 }
 
 function GetSize {
@@ -116,13 +114,14 @@ function GetSize {
 function SavePackage {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[Net.Http.HttpResponseMessage]$Resp
+		[Net.Http.HttpResponseMessage]$Resp,
+		[Parameter(Mandatory)]
+		[string]$Digest
 	)
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 	SetCursorVisible $false
 	try {
 		$layers = $Resp | GetPackageLayers
-		$digest = $Resp | GetDigest
 		$files = @()
 		$bytes = 0
 		foreach ($layer in $layers) {
@@ -130,7 +129,8 @@ function SavePackage {
 				$url = "$(GetDockerRegistry)/$(GetDockerRepo)/blobs/$($layer.Digest)"
 				$auth = (GetAuthToken)
 				$accept = 'application/octet-stream'
-				$file, $size = $layer.Digest | DownloadFile -Extension 'tar.gz' -ArgumentList $url, $auth, $accept | ExtractTarGz -Digest $digest
+				$file, $size = $layer.Digest | DownloadFile -Extension 'tar.gz' -ArgumentList $url, $auth, $accept
+				$file | ExtractTarGz -Digest $Digest
 				"$($layer.Digest | AsDigestString): Pull complete" + ' ' * 60 | WriteConsole
 				$files += $file
 				$bytes += $size
@@ -141,7 +141,7 @@ function SavePackage {
 		foreach ($f in $files) {
 			[IO.File]::Delete($f)
 		}
-		$bytes
+		[long]$bytes
 	} finally {
 		SetCursorVisible $true
 	}
@@ -199,5 +199,5 @@ function AirpowerResolveDockerHubPackage {
 		[Parameter(Mandatory)]
 		[string]$Digest
 	)
-	"$Package-$Tag" | GetManifest | DebugRateLimit | SavePackage
+	"$Package-$Tag" | GetManifest | DebugRateLimit | SavePackage -Digest $Digest
 }

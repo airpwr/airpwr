@@ -32,7 +32,7 @@ function AsTagString {
 
 function GetRemoteTags {
 	$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Tags"
-	$pkgs = & $fn
+	[hashtable]$pkgs = & $fn
 	$o = New-Object PSObject
 	foreach ($k in $pkgs.Keys | Sort-Object) {
 		$tags = @()
@@ -102,7 +102,7 @@ function ResolveRemotePackage {
 	if (-not $fn) {
 		$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Digest"
 	}
-	$tag, $digest = & $fn $Pkg.Package $Pkg.Tag
+	[string]$tag, [string]$digest = & $fn $Pkg.Package $Pkg.Tag
 	if ($tag -and $digest) {
 		return $tag, $digest
 	}
@@ -271,10 +271,11 @@ function PullPackage {
 				if (-not $fn) {
 					$fn = Get-Item "function:AirpowerResolve$(GetAirpowerRemote)Package"
 				}
-				$Pkg.Size = & $fn $Pkg.Package $tag $digest
-				if ($Pkg.Size -le 0) {
+				[long]$size = & $fn $Pkg.Package $tag $digest
+				if ($size -le 0) {
 					throw "failed to retrieve: $ref"
 				}
+				$Pkg.Size = $size
 			}
 			$refpath = $Pkg | ResolvePackageRefPath
 			MakeDirIfNotExist (Split-Path $refpath) | Out-Null

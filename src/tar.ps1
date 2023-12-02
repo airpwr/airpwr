@@ -65,6 +65,9 @@ function ExtractTarGz {
 		[Parameter(Mandatory)]
 		[string]$Digest
 	)
+	if (-not (Test-Path $Path -Type Leaf)) {
+		throw "file $Path does not exist"
+	}
 	$tgz = $Path | Split-Path -Leaf
 	$layer = $tgz.Replace('.tar.gz', '')
 	if ($layer -ne (Get-FileHash $Path).Hash) {
@@ -82,7 +85,6 @@ function ExtractTarGz {
 	} finally {
 		$fs.Dispose()
 	}
-	return $Path
 }
 
 class Util {
