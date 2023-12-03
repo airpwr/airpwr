@@ -1,25 +1,14 @@
 # remote
 
-Outputs an object of remote packages and versions.
+Outputs the remote.
 
 ## Usage
 
-	airpower remote list
+	airpower remote
 
 ## Examples
 
 ```
-PS C:\example> airpower remote list
-
-somepkg    : {1.2.3, 1.1.0}
-anotherpkg : 3.3.1
-```
-
-```
-PS C:\example> airpower remote list | select -expand somepkg
-
-Major Minor Patch Build
------ ----- ----- -----
-1     2     3
-1     1     0
+PS C:\example> airpower remote
+dockerhub
 ```

@@ -58,7 +58,7 @@ class FileLock {
 }
 
 class Db {
-	static [string]$Dir = (GetPwrDBPath)
+	static [string]$Dir = (GetPwrDbPath)
 
 	static Db() {
 		[Db]::Init()
@@ -177,7 +177,7 @@ class Db {
 					if ($locks) {
 						$locks.Revert()
 					}
-					return $null, "a package $($decodedKey) is being used by another airpower process"
+					return $null, "a package $decodedKey is being used by another airpower process"
 				}
 			}
 		}

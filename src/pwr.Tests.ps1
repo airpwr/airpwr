@@ -50,23 +50,23 @@ Describe 'Invoke-Airpower' {
 		BeforeAll {
 			Mock FindConfig {
 				return {
-					function AirpowerTest1 {
+					function AirpowerRunTest1 {
 						return 2
 					}
-					function AirpowerTest2 {
+					function AirpowerRunTest2 {
 						param (
 							[int]$X,
 							[int]$Y
 						)
 						return $X - $Y
 					}
-					function AirpowerTest3 {
+					function AirpowerRunTest3 {
 						param (
 							[string]$Option = 'hello'
 						)
 						return $Option
 					}
-					function AirpowerTest4 {
+					function AirpowerRunTest4 {
 						param (
 							[switch]$Enabled
 						)
@@ -119,13 +119,13 @@ Describe 'Invoke-Airpower' {
 	}
 	Context 'Run Without Config' {
 		BeforeAll {
-			function AirpowerTest {
+			function AirpowerRunTest {
 				return 2
 			}
 			Mock FindConfig { }
 		}
 		AfterAll {
-			Remove-Item 'function:AirpowerTest'
+			Remove-Item 'function:AirpowerRunTest'
 		}
 		It 'Function Without Params' {
 			$res = & $pwr 'run' 'test'
@@ -193,7 +193,7 @@ Describe 'Invoke-AirpowerRun' {
 				return {
 					$AirpowerPackages = 'go'
 					$AirpowerPackages | Out-Null
-					function AirpowerTest { }
+					function AirpowerRunTest { }
 				}
 			}
 			Mock ResolvePackage {

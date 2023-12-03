@@ -8,7 +8,8 @@ function BuildPsm1 {
 		$content = ''
 		foreach ($line in (Get-Content $path)) {
 			if ($line -match '^\. \$PSScriptRoot\\(.+)\.ps1$') {
-				$file = ".\src\$($Matches[1]).ps1"
+				$dir = (Split-Path -Parent $path | Resolve-Path).Path
+				$file = (Get-Item "$dir\$($Matches[1]).ps1").ToString()
 				if ($file -notin $seen) {
 					$script:seen += $file
 					$content += & $parse $file
