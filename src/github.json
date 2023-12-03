@@ -91,6 +91,7 @@
 		"repo": "vscode",
 		"tag": "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
 		"releases": true,
+		"only": ["latest"],
 		"url": "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-archive",
 		"compression": "zip",
 		"files": ["code.cmd"]
@@ -98,7 +99,7 @@
 	"zig": {
 		"owner": "ziglang",
 		"repo": "zig",
-		"tag": "^([0-9]+)\\.([0-9]+)(\\.[0-9]+)?$",
+		"tag": "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$",
 		"releases": true,
 		"url": "https://ziglang.org/download/{0}/zig-windows-x86_64-{0}.zip",
 		"compression": "zip",
