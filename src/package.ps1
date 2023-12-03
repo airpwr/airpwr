@@ -122,16 +122,23 @@ function GetLocalPackages {
 			$tag = $lock.Key[2]
 			$t = [Tag]::new($tag)
 			$digest = if ($t.None) { $tag } else { $lock.Get() }
-			$m = [Db]::Get(('metadatadb', $digest))
-			$pkgs += [LocalPackage]@{
-				Package = $lock.Key[1]
-				Tag = $t
-				Digest = $digest | AsDigest
-				Size = $m.size | AsSize
-				Updated = if ($m.updated) { [datetime]::Parse($m.updated) } else { }
-				Orphaned = if ($m.orphaned) { [datetime]::Parse($m.orphaned) }
+			if ($digest) {
+				$m, $err = [Db]::TryGet(('metadatadb', $digest))
+				if ($m) {
+					$pkgs += [LocalPackage]@{
+						Package = $lock.Key[1]
+						Tag = $t
+						Digest = $digest | AsDigest
+						Size = $m.size | AsSize
+						Updated = if ($m.updated) { [datetime]::Parse($m.updated) } else { }
+						Orphaned = if ($m.orphaned) { [datetime]::Parse($m.orphaned) }
+					}
+					$lock.Unlock()
+				}
+			} else {
+				$lock.Remove()
+				$lock.Unlock()
 			}
-			$lock.Unlock()
 		}
 	} finally {
 		if ($locks) {
@@ -152,9 +159,9 @@ function ResolvePackageDigest {
 	if ($Pkg.Digest) {
 		return $Pkg.Digest
 	}
-	$k = 'pkgdb', $Pkg.Package, ($Pkg.Tag | AsTagString)
-	if ([Db]::ContainsKey($k)) {
-		return [Db]::Get($k)
+	$p, $err = [Db]::TryGet(('pkgdb', $Pkg.Package, ($Pkg.Tag | AsTagString)))
+	if ($p) {
+		$p
 	}
 }
 
