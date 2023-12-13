@@ -67,7 +67,11 @@ function Invoke-Airpower {
 				Invoke-AirpowerExec @params @remaining
 			}
 			'run' {
-				Invoke-AirpowerRun @ArgumentList
+				if ($PSVersionTable.PSVersion.Major -le 5) {
+					Invoke-AirpowerRun @ArgumentList
+				} else {
+					Invoke-AirpowerRun -FnName $ArgumentList[0] -ArgumentList $ArgumentList[1..$ArgumentList.Count]
+				}
 			}
 			{$_ -in 'help', 'h'} {
 				Invoke-AirpowerHelp
