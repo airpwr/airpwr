@@ -564,7 +564,8 @@ function GetOutofdatePackages {
 
 function UpdatePackages {
 	param (
-		[switch]$Auto
+		[switch]$Auto,
+		[string[]]$Packages
 	)
 	$autoupdate = (GetAirpowerAutoupdate)
 	if ($Auto -and -not $autoupdate) {
@@ -576,7 +577,13 @@ function UpdatePackages {
 		return
 	}
 	$updated = 0
+	$skipped = 0
+	$formal_pkgs = if ($Packages) { $Packages | AsPackage | ForEach-Object { "$($_.Package):$($_.Tag | AsTagString)" } }
 	foreach ($pkg in $pkgs) {
+		if ($Auto -and $pkg -notin $formal_pkgs) {
+			++$skipped
+			continue
+		}
 		try {
 			$status = $pkg | AsPackage | PullPackage
 			if ($status -ne 'uptodate') {
@@ -591,7 +598,7 @@ function UpdatePackages {
 	if ($err) {
 		throw $err
 	}
-	WriteHost "Updated $updated package$(if ($updated -ne 1) { 's' })"
+	WriteHost "Updated $updated package$(if ($updated -ne 1) { 's' })$(if ($skipped -ne 0) { " (Run update command to check $skipped skipped package$(if ($skipped -ne 1) { 's' })" }))"
 }
 
 class Digest {

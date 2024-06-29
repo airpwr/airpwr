@@ -143,6 +143,7 @@ function Invoke-AirpowerLoad {
 	if (-not $Packages) {
 		Write-Error 'no packages provided'
 	}
+	UpdatePackages -Auto $Packages
 	TryEachPackage $Packages { $Input | ResolvePackage | LoadPackage } -ActionDescription 'load'
 }
 
@@ -216,6 +217,7 @@ function Invoke-AirpowerExec {
 	if (-not $Packages) {
 		Write-Error "no packages provided"
 	}
+	UpdatePackages -Auto $Packages
 	$resolved = TryEachPackage $Packages { $Input | ResolvePackage } -ActionDescription 'resolve'
 	ExecuteScript -ScriptBlock $ScriptBlock -Pkgs $resolved
 }
@@ -285,7 +287,6 @@ Set-Alias -Name 'pwr' -Value 'Invoke-Airpower' -Scope Global
 	if ('Airpower.psm1' -eq (Split-Path $MyInvocation.ScriptName -Leaf)) {
 		# Invoked as a module
 		CheckForUpdates
-		UpdatePackages -Auto
 		PrunePackages -Auto
 	}
 }

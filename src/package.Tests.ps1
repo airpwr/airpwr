@@ -374,15 +374,32 @@ Describe 'UpdatePackages' {
 	}
 	Context 'Auto' {
 		BeforeAll {
-			Mock GetOutofdatePackages { @() }
 			$script:AirpowerAutoupdate = "4.11:22:33"
+		}
+		BeforeEach {
+			[Db]::Put(('pkgdb', 'somepkg', 'sha256:fde54e65gd4678'), $null)
+			[Db]::Put(('pkgdb', 'somepkg', 'latest'), 'abc')
+			[Db]::Put(('pkgdb', 'another', 'sha256:e340857fffc987'), $null)
+			[Db]::Put(('pkgdb', 'another', 'latest'), 'xyz')
+			[Db]::Put(('metadatadb', 'abc'), @{RefCount = 1; Updated = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'xyz'), @{RefCount = 1; Updated = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'sha256:fde54e65gd4678'), @{RefCount = 1; Updated = '0001-01-01 00:00:00Z'})
+			[Db]::Put(('metadatadb', 'sha256:e340857fffc987'), @{RefCount = 1; Updated = '0001-01-01 00:00:00Z'})
 		}
 		AfterAll {
 			$script:AirpowerAutoupdate = $null
 		}
-		It 'Updates' {
+		It 'Outofdate' {
+			Mock GetOutofdatePackages { @() }
 			UpdatePackages -Auto
 			Should -Invoke -CommandName 'GetOutofdatePackages' -Exactly -Times 1 -ParameterFilter { $Span -eq [timespan]::new(4, 11, 22, 33) }
+		}
+		It 'Updates' {
+			Mock PullPackage {
+				return 'newer'
+			}
+			UpdatePackages -Auto somepkg
+			Should -Invoke -CommandName 'PullPackage' -Exactly -Times 1
 		}
 	}
 }
