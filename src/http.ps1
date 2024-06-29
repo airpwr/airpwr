@@ -3,24 +3,28 @@ Add-Type -AssemblyName System.Net.Http
 function HttpRequest {
 	param (
 		[Parameter(Mandatory)]
-		[string]$URL,
-		[ValidateSet('GET', 'HEAD')]
-		[string]$Method = 'GET',
+		[string]$Url,
 		[string]$AuthToken,
 		[string]$Accept,
+		[string]$UserAgent,
+		[ValidateSet('GET', 'HEAD')]
+		[string]$Method = 'GET',
 		[string]$Range
 	)
-	$req = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::new($Method), $URL)
+	$req = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::new($Method), $Url)
 	if ($AuthToken) {
 		$req.Headers.Authorization = "Bearer $AuthToken"
 	}
 	if ($Accept) {
 		$req.Headers.Accept.Add($Accept)
 	}
+	if ($UserAgent) {
+		$req.Headers.UserAgent.Add($UserAgent)
+	}
 	if ($Range) {
 		$req.Headers.Range = $Range
 	}
-	return $req
+	$req
 }
 
 function HttpSend {
@@ -47,8 +51,12 @@ function GetJsonResponse {
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[Net.Http.HttpResponseMessage]$Resp
 	)
-	if (($resp.Content.Headers.ContentType.MediaType -ne 'application/json') -and -not $resp.Content.Headers.ContentType.MediaType.EndsWith('+json')) {
-		throw "want application/json, got $($resp.Content.Headers.ContentType.MediaType)"
+	if (($Resp.Content.Headers.ContentType.MediaType -ne 'application/json') -and -not $Resp.Content.Headers.ContentType.MediaType.EndsWith('+json')) {
+		throw "want application/json, got $($Resp.Content.Headers.ContentType.MediaType)"
 	}
 	return $Resp.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
+}
+
+function GetUserAgent {
+	"PowerShell/$($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)"
 }

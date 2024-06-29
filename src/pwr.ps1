@@ -59,7 +59,8 @@ function Invoke-Airpower {
 				}
 			}
 			'exec' {
-				$params, $remaining = ResolveParameters 'Invoke-AirpowerExec' $ArgumentList
+				$fn = Get-Item 'function:Invoke-AirpowerExec'
+				$params, $remaining = ResolveParameters $fn $ArgumentList
 				if ((-not $params.ScriptBlock) -and ($null -ne $remaining) -and ($remaining[-1] -isnot [scriptblock])) {
 					$params.Packages += $remaining | ForEach-Object { $_ }
 					$remaining = @()
@@ -83,30 +84,26 @@ function Invoke-Airpower {
 }
 
 function GetConfigPackages {
-	$cfg = FindConfig
-	if ($cfg) {
-		. $cfg
-	}
+	LoadConfig
 	[string[]]$AirpowerPackages
 }
 
 function ResolveParameters {
 	param (
 		[Parameter(Mandatory)]
-		[string]$FnName,
+		[System.Management.Automation.FunctionInfo]$Fn,
 		[object[]]$ArgumentList
 	)
-	$fn = Get-Item "function:$FnName"
 	$params = @{}
 	$remaining = [Collections.ArrayList]@()
 	for ($i = 0; $i -lt $ArgumentList.Count; $i++) {
-		if ($fn.parameters.keys -and ($ArgumentList[$i] -match '^-([^:]+)(?::(.*))?$') -and ($Matches[1] -in $fn.parameters.keys)) {
+		if ($Fn.parameters.keys -and ($ArgumentList[$i] -match '^-([^:]+)(?::(.*))?$') -and ($Matches[1] -in $Fn.parameters.keys)) {
 			$name = $Matches[1]
 			$value = $Matches[2]
 			if ($value) {
 				$params.$name = $value
 			} else {
-				if ($fn.parameters.$name.SwitchParameter -and $null -eq $value) {
+				if ($Fn.parameters.$name.SwitchParameter -and $null -eq $value) {
 					$params.$name = $true
 				} else {
 					$params.$name = $ArgumentList[$i+1]
@@ -189,19 +186,14 @@ function Invoke-AirpowerRun {
 		[Parameter(ValueFromRemainingArguments)]
 		[object[]]$ArgumentList
 	)
-	$cfg = FindConfig
-	if ($cfg) {
-		. $cfg
-	}
-	$fn = Get-Item "function:Airpower$FnName"
-	if ($fn) {
-		$params, $remaining = ResolveParameters "Airpower$FnName" $ArgumentList
-		$script = { & $fn @params @remaining }
-		if ($AirpowerPackages) {
-			Invoke-AirpowerExec -Packages $AirpowerPackages -ScriptBlock $script
-		} else {
-			& $script
-		}
+	LoadConfig
+	$fn = Get-Item "function:AirpowerRun$FnName"
+	$params, $remaining = ResolveParameters $fn $ArgumentList
+	$script = { & $fn @params @remaining }
+	if ($AirpowerPackages) {
+		Invoke-AirpowerExec -Packages $AirpowerPackages -ScriptBlock $script
+	} else {
+		& $script
 	}
 }
 
@@ -225,13 +217,20 @@ function Invoke-AirpowerExec {
 function Invoke-AirpowerRemote {
 	[CmdletBinding()]
 	param (
-		[Parameter(Mandatory)]
-		[ValidateSet('list')]
-		[string]$Command
+		[ValidateSet('', 'list', 'set')]
+		[string]$Command,
+		[ValidateScript({ $Command -eq 'set' })]
+		[string]$Remote
 	)
 	switch ($Command) {
+		'' {
+			GetAirpowerRemote
+		}
 		'list' {
 			GetRemoteTags
+		}
+		'set' {
+			SetAirpowerRemote $Remote
 		}
 	}
 }
@@ -262,7 +261,7 @@ For detailed documentation and examples, visit https://github.com/airpwr/airpwr.
 function CheckForUpdates {
 	try {
 		$params = @{
-			URL = "https://www.powershellgallery.com/packages/airpower"
+			Url = "https://www.powershellgallery.com/packages/airpower"
 			Method = 'HEAD'
 		}
 		$resp = HttpRequest @params | HttpSend -NoRedirect

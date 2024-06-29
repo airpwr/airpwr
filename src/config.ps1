@@ -39,6 +39,36 @@ function GetAirpowerPullPolicy {
 	}
 }
 
+function GetAirpowerRemote {
+	if ($AirpowerRemote) {
+		$AirpowerRemote
+	} elseif ($env:AirpowerRemote) {
+		$env:AirpowerRemote
+	} else {
+		$k = 'remotedb', 'remote'
+		if ([Db]::ContainsKey($k) -and ($r = [Db]::Get($k))) {
+			[string]$r
+		} else {
+			'dockerhub'
+		}
+	}
+}
+
+function SetAirpowerRemote {
+	param (
+		[string]$Remote
+	)
+	$k = 'remotedb', 'remote'
+	if ($Remote) {
+		if (-not (Get-Item "function:AirpowerResolve${Remote}Tags" -ErrorAction SilentlyContinue) -or -not (Get-Item "function:AirpowerResolve${Remote}Digest" -ErrorAction SilentlyContinue) -or -not (Get-Item "function:AirpowerResolve${Remote}Download" -ErrorAction SilentlyContinue)) {
+			Write-Warning "airpower remote '$Remote' could not be resolved"
+		}
+		[Db]::Put($k, $Remote)
+	} else {
+		[Db]::Remove($k)
+	}
+}
+
 function GetAirpowerAutoprune {
 	if ($AirpowerAutoprune) {
 		$AirpowerAutoprune
@@ -55,7 +85,7 @@ function GetAirpowerAutoupdate {
 	}
 }
 
-function GetPwrDBPath {
+function GetPwrDbPath {
 	"$(GetAirpowerPath)\cache"
 }
 
@@ -67,12 +97,23 @@ function GetPwrContentPath {
 	"$(GetAirpowerPath)\content"
 }
 
+function AsDigestString {
+	param (
+		[Parameter(Mandatory, ValueFromPipeline)]
+		[string]$Digest
+	)
+	if ($Digest.StartsWith('sha256:')) {
+		return $Digest.Substring(7, 12)
+	}
+	return $Digest.Substring(0, 12)
+}
+
 function ResolvePackagePath {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
 		[string]$Digest
 	)
-	return "$(GetPwrContentPath)\$($digest.Substring('sha256:'.Length).Substring(0, 12))"
+	"$(GetPwrContentPath)\$($Digest | AsDigestString)"
 }
 
 function MakeDirIfNotExist {
@@ -91,5 +132,12 @@ function FindConfig {
 			return $cfg
 		}
 		$path = $path | Split-Path -Parent
+	}
+}
+
+function LoadConfig {
+	$cfg = FindConfig
+	if ($cfg) {
+		. $cfg
 	}
 }
