@@ -444,6 +444,7 @@ Describe 'GetLocalPackages' {
 			$pkgs[0].Package | Should -Be $null
 			$pkgs[0].Tag | Should -Be $null
 			$pkgs[0].Digest | Should -Be $null
+			$pkgs[0].Version | Should -Be $null
 			$pkgs[0].Size | Should -Be $null
 		}
 	}
@@ -453,6 +454,7 @@ Describe 'GetLocalPackages' {
 			[Db]::Put(('pkgdb', 'somepkg', 'latest'), $digest)
 			[Db]::Put(('metadatadb', $digest), @{
 				RefCount = 1
+				Version = "1"
 				Size = 293874
 			})
 		}
@@ -462,6 +464,7 @@ Describe 'GetLocalPackages' {
 			$pkgs[0].Package | Should -Be 'somepkg'
 			$pkgs[0].Tag | Should -Be 'latest'
 			$pkgs[0].Digest.Sha256 | Should -Be $digest
+			$pkgs[0].Version | Should -Be "1"
 			$pkgs[0].Size.Bytes | Should -Be 293874
 		}
 	}

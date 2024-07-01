@@ -153,7 +153,8 @@ function ResolveRemoteRef {
 			$eq = $eq -and $want.Build -eq $got.Build
 		}
 		if ($eq) {
-			return "$($Pkg.Package)-$(($got.ToString()).Replace('+', '_'))"
+			$Pkg.Version = $got.ToString()
+			return "$($Pkg.Package)-$($Pkg.Version.Replace('+', '_'))"
 		}
 	}
 	throw "no such $($Pkg.Package) tag: $($Pkg.Tag)"
@@ -174,6 +175,7 @@ function GetLocalPackages {
 			$pkgs += [LocalPackage]@{
 				Package = $lock.Key[1]
 				Tag = $t
+				Version = $m.Version
 				Digest = $digest | AsDigest
 				Size = $m.size | AsSize
 				Updated = if ($m.updated) { [datetime]::Parse($m.updated) } else { }
@@ -248,6 +250,7 @@ function InstallPackage { # $locks, $status
 		{$_ -in 'new', 'newer'} {
 			$mLock.Put(@{
 				RefCount = 1
+				Version = $Pkg.Version
 				Size = $Pkg.Size
 				Updated = [datetime]::UtcNow.ToString()
 			})
@@ -759,6 +762,7 @@ function AsSize {
 class LocalPackage {
 	[object]$Package
 	[Tag]$Tag
+	[string]$Version
 	[Digest]$Digest
 	[Size]$Size
 	[object]$Updated
