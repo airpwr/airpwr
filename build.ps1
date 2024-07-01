@@ -23,7 +23,7 @@ function BuildPsm1 {
 }
 
 function GetModuleVersion {
-	"0.6.7"
+	"0.7.0"
 }
 
 $buildDir = '.\build\Airpower'
@@ -76,6 +76,9 @@ Out-File "$buildDir\Airpower.Format.ps1xml" -Encoding ascii -Force -InputObject 
 								</TableColumnItem>
 								<TableColumnItem>
 									<PropertyName>Tag</PropertyName>
+								</TableColumnItem>
+								<TableColumnItem>
+									<PropertyName>Version</PropertyName>
 								</TableColumnItem>
 								<TableColumnItem>
 									<PropertyName>Digest</PropertyName>
