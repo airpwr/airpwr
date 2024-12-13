@@ -15,7 +15,7 @@ function Invoke-Airpower {
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory)]
-		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'exec', 'run', 'remove', 'rm', 'prune', 'update', 'help', 'h')]
+		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'exec', 'run', 'remove', 'rm', 'save', 'prune', 'update', 'help', 'h')]
 		[string]$Command,
 		[Parameter(ValueFromRemainingArguments)]
 		[object[]]$ArgumentList
@@ -57,6 +57,10 @@ function Invoke-Airpower {
 				} else {
 					Invoke-AirpowerRemove $ArgumentList
 				}
+			}
+			'save' {
+				$params, $remaining = ResolveParameters 'Invoke-AirpowerSave' $ArgumentList
+				Invoke-AirpowerSave @params @remaining
 			}
 			'exec' {
 				$params, $remaining = ResolveParameters 'Invoke-AirpowerExec' $ArgumentList
@@ -236,6 +240,25 @@ function Invoke-AirpowerRemote {
 	}
 }
 
+function Invoke-AirpowerSave {
+	[CmdletBinding()]
+	param (
+		[string[]]$Packages,
+		[Parameter(Mandatory)]
+		[string]$Output
+	)
+	if (-not $Packages) {
+		$Packages = GetConfigPackages
+	}
+	if (-not $Packages) {
+		Write-Error "no packages provided"
+	}
+	if (-not $Output) {
+		Write-Error "no output directory provided"
+	}
+	TryEachPackage $Packages { $Input | AsPackage | PullPackage -Output $Output | Out-Null } -ActionDescription 'save'
+}
+
 function Invoke-AirpowerHelp {
 @"
 
@@ -252,6 +275,7 @@ Commands:
   update         Updates all tagged packages
   prune          Deletes unreferenced packages
   remove         Untags and deletes packages
+  save           Downloads packages for use in an offline installation
   help           Outputs usage for this command
 
 For detailed documentation and examples, visit https://github.com/airpwr/airpwr.

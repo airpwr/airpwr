@@ -24,6 +24,7 @@ Commands:
   update         Updates all tagged packages
   prune          Deletes unreferenced packages
   remove         Untags and deletes packages
+  save           Downloads packages for use in an offline installation
   help           Outputs usage for this command
 
 For detailed documentation and examples, visit https://github.com/airpwr/airpwr.

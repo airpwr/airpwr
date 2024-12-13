@@ -157,7 +157,7 @@ function ResolveRemoteRef {
 			return "$($Pkg.Package)-$($Pkg.Version.Replace('+', '_'))"
 		}
 	}
-	throw "no such $($Pkg.Package) tag: $($Pkg.Tag)"
+	throw "no such $($Pkg.Package) tag: $($Pkg.Tag | AsTagString)"
 }
 
 function GetLocalPackages {
@@ -304,19 +304,34 @@ function InstallPackage { # $locks, $status
 function PullPackage {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[Collections.Hashtable]$Pkg
+		[Collections.Hashtable]$Pkg,
+		[string]$Output
 	)
-	$ref = $Pkg | ResolveRemoteRef
-	$digest = $ref | GetDigestForRef
+	$remoteRef = $Pkg | ResolveRemoteRef
+	$digest = $remoteRef | GetDigestForRef
 	WriteHost "Pulling $($Pkg.Package):$($pkg.Tag | AsTagString)"
 	WriteHost "Digest: $($digest)"
 	$k = 'metadatadb', $digest
-	if ([Db]::ContainsKey($k) -and ($m = [Db]::Get($k)) -and $m.Size) {
+	if ([Db]::ContainsKey($k) -and ($m = [Db]::Get($k)) -and $m.Size -and -not $Output) {
 		$size = $m.Size
 	} else {
-		$manifest = $ref | GetManifest
+		$manifest = $remoteRef | GetManifest
 		$manifest | DebugRateLimit
 		$size = $manifest | GetSize
+		if ($Output) {
+			MakeDirIfNotExist "$Output\$remoteRef" | Out-Null
+			$fs = [IO.File]::Open("$(Resolve-Path "$Output\$remoteRef")\manifest.json", [IO.FileMode]::Create)
+			try {
+				$task = $manifest.Content.CopyToAsync($fs)
+				while (-not $task.IsCompleted) {
+					Start-Sleep -Milliseconds 125
+				}
+			} finally {
+				$fs.Close()
+			}
+			$manifest | SavePackage -Output "$Output\$remoteRef"
+			return 'new'
+		}
 	}
 	$Pkg.Digest = $digest
 	$Pkg.Size = $size
@@ -349,7 +364,8 @@ function PullPackage {
 function SavePackage {
 	param (
 		[Parameter(Mandatory, ValueFromPipeline)]
-		[Net.Http.HttpResponseMessage]$Resp
+		[Net.Http.HttpResponseMessage]$Resp,
+		[String]$Output
 	)
 	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 	SetCursorVisible $false
@@ -359,7 +375,11 @@ function SavePackage {
 		$temp = @()
 		foreach ($layer in $layers) {
 			try {
-				$temp += $layer.Digest | SaveBlob | ExtractTarGz -Digest $digest
+				if ($Output) {
+					$layer.Digest | SaveBlob -Output $Output
+				} else {
+					$temp += $layer.Digest | SaveBlob | ExtractTarGz -Digest $digest
+				}
 				"$($layer.Digest.Substring('sha256:'.Length).Substring(0, 12)): Pull complete" + ' ' * 60 | WriteConsole
 			} finally {
 				WriteConsole "`n"
