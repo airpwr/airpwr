@@ -4,13 +4,35 @@
 . $PSScriptRoot\tar.ps1
 
 function GetDockerRepo {
-	return 'airpower/shipyard'
+	if ($AirpowerDockerRepo) {
+		$AirpowerDockerRepo
+	} elseif ($env:AirpowerDockerRepo) {
+		$env:AirpowerDockerRepo
+	} else {
+		'airpower/shipyard'
+	}
+}
+
+function GetDockerV2 {
+	if ($AirpowerDockerV2) {
+		$AirpowerDockerV2
+	} elseif ($env:AirpowerDockerV2) {
+		$env:AirpowerDockerV2
+	} else {
+		'index.docker.io'
+	}
 }
 
 function GetAuthToken {
-	$auth = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$(GetDockerRepo):pull"
-	$resp = HttpRequest $auth | HttpSend | GetJsonResponse
-	return $resp.Token
+	if ($AirpowerDockerToken) {
+		$AirpowerDockerToken
+	} elseif ($env:AirpowerDockerToken) {
+		$env:AirpowerDockerToken
+	} else {
+		$auth = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$(GetDockerRepo):pull"
+		$resp = HttpRequest $auth | HttpSend | GetJsonResponse
+		return $resp.Token
+	}
 }
 
 function GetTagsList {
@@ -19,7 +41,7 @@ function GetTagsList {
 		return [PSCustomObject]@{ Name = $repo; Tags = (Get-ChildItem $repo -Directory -Name) }
 	}
 	$api = "/v2/$(GetDockerRepo)/tags/list"
-	$endpoint = "https://index.docker.io$api"
+	$endpoint = "https://$(GetDockerV2)$api"
 	return HttpRequest $endpoint -AuthToken (GetAuthToken) | HttpSend | GetJsonResponse
 }
 
@@ -46,7 +68,7 @@ function GetManifest {
 	}
 	$api = "/v2/$(GetDockerRepo)/manifests/$Ref"
 	$params = @{
-		URL = "https://index.docker.io$api"
+		URL = "https://$(GetDockerV2)$api"
 		AuthToken = (GetAuthToken)
 		Accept = 'application/vnd.docker.distribution.manifest.v2+json'
 		Method = $Method
@@ -77,7 +99,7 @@ function GetBlob {
 	}
 	$api = "/v2/$(GetDockerRepo)/blobs/$Ref"
 	$params = @{
-		URL = "https://index.docker.io$api"
+		URL = "https://$(GetDockerV2)$api"
 		AuthToken = (GetAuthToken)
 		Accept = 'application/octet-stream'
 		Range = "bytes=$StartByte-$($StartByte + 536870911)" # Request in 512 MB chunks
