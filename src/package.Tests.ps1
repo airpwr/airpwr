@@ -588,3 +588,65 @@ Describe 'RemovePackage' {
 		}
 	}
 }
+
+Describe 'SavePackage' {
+	Context 'Ref' {
+		$script:testRoot = (Resolve-Path "$PSScriptRoot\..\test").Path
+		$script:testPath = "$testRoot\save_package_test"
+		BeforeAll {
+			Mock ResolveRemoteRef { 'none' }
+
+			Mock GetManifest {
+				$response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::OK)
+				$response.Headers.Add('Docker-Content-Digest', "sha256:00000000000000000000")
+				$response.Content = [Net.Http.StringContent]::new('none manifest')
+				return $response
+			}
+			Mock DebugRateLimit {}
+			Mock GetSize {}
+			Mock WriteHost {}
+			Mock SavePackage {
+				param (
+					[Parameter(Mandatory, ValueFromPipeline)]
+					[Net.Http.HttpResponseMessage]$Resp,
+					[String]$Output
+				)
+				$null = $Resp
+				MakeDirIfNotExist $Output | Out-Null
+				Set-Content -Path "$Output\file.txt" -Value 'abc123'
+			}
+			Mock GetAirpowerPath {
+				$testPath
+			}
+		}
+		AfterEach {
+			[IO.Directory]::Delete($testPath, $true)
+		}
+		It 'No Exist Creates New' {
+			$pkg = @{
+				Package = 'somepkg'
+				Tag = @{ Latest = $true }
+			}
+			$pkg | PullPackage -Output "$testPath\cache"
+			"$testPath\cache\none\manifest.json" | Should -Exist
+			"$testPath\cache\none\manifest.json" | Should -FileContentMatchExactly 'none manifest'
+			"$testPath\cache\none\file.txt" | Should -Exist
+			"$testPath\cache\none\file.txt" | Should -FileContentMatchExactly 'abc123'
+		}
+		It 'Exist Creates New' {
+			New-Item "$testPath\cache" -ItemType Directory
+			New-Item "$testPath\cache\none" -ItemType Directory
+			Set-Content -Path "$testPath\cache\none\manifest.json" -Value 'something'
+			Set-Content -Path "$testPath\cache\none\file.txt" -Value 'something'
+			$pkg = @{
+				Package = 'somepkg'
+				Tag = @{ Latest = $true }
+			}
+			$pkg | PullPackage -Output "$testPath\cache"
+			"$testPath\cache\none\manifest.json" | Should -Exist
+			"$testPath\cache\none\manifest.json" | Should -FileContentMatchExactly 'none manifest'
+			"$testPath\cache\none\file.txt" | Should -Exist
+			"$testPath\cache\none\file.txt" | Should -FileContentMatchExactly 'abc123'
+		}
+	}
+}

@@ -29,6 +29,14 @@ function GetAirpowerPath {
 	}
 }
 
+function GetAirpowerRepo {
+	if ($AirpowerRepo) {
+		$AirpowerRepo
+	} elseif ($env:AirpowerRepo) {
+		$env:AirpowerRepo
+	}
+}
+
 function GetAirpowerPullPolicy {
 	if ($AirpowerPullPolicy) {
 		$AirpowerPullPolicy

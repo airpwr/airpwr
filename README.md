@@ -53,6 +53,7 @@ Command | Description
 [`update`](./doc/airpower-update.md) | Updates all tagged packages
 [`prune`](./doc/airpower-prune.md) | Deletes unreferenced packages
 [`remove`](./doc/airpower-remove.md) | Untags and deletes packages
+[`save`](./doc/airpower-save.md) | Downloads packages for use in an offline installation
 [`help`](./doc/airpower-help.md) | Outputs usage for this command
 
 # Configuration
