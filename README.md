@@ -23,6 +23,8 @@ Install-PackageProvider -Name NuGet -Force
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
 ```
 
+Alternatively, if <powershellgallery.com> is not available, you can download or clone this repository and install locally with the `install.ps1` script.
+
 See the [Airpower PS Gallery](https://www.powershellgallery.com/packages/Airpower) for other installation methods.
 
 # Updating

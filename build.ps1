@@ -26,7 +26,7 @@ function GetModuleVersion {
 	"0.7.1"
 }
 
-$buildDir = '.\build\Airpower'
+$buildDir = "$PSScriptRoot\build\Airpower"
 if (-not (Test-Path $buildDir -PathType Container)) {
 	New-Item -Path $buildDir -ItemType Directory | Out-Null
 }
