@@ -15,7 +15,7 @@ function Invoke-Airpower {
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory)]
-		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'exec', 'run', 'remove', 'rm', 'save', 'prune', 'update', 'help', 'h')]
+		[ValidateSet('version', 'v', 'remote', 'list', 'load', 'pull', 'env', 'exec', 'run', 'remove', 'rm', 'save', 'prune', 'update', 'help', 'h')]
 		[string]$Command,
 		[Parameter(ValueFromRemainingArguments)]
 		[object[]]$ArgumentList
@@ -37,6 +37,9 @@ function Invoke-Airpower {
 				} else {
 					Invoke-AirpowerLoad $ArgumentList
 				}
+			}
+			'env' {
+				Invoke-AirpowerEnv @ArgumentList
 			}
 			'pull' {
 				if ($PSVersionTable.PSVersion.Major -le 5) {
@@ -165,6 +168,47 @@ function Invoke-AirpowerUpdate {
 	UpdatePackages
 }
 
+function Invoke-AirpowerEnv {
+	[CmdletBinding()]
+	param (
+		[Parameter(Mandatory)]
+		[ValidateSet('add', 'remove')]
+		[string]$AddOrRemove,
+		[Parameter(Mandatory)]
+		[string[]]$Packages,
+		[ValidateSet('Process', 'User', 'Machine')]
+		[string]$Target = 'User'
+	)
+	$envs = @{}
+	TryEachPackage $Packages { $Input | ResolvePackage } -ActionDescription 'env' | ForEach-Object {
+		$pkg = $_.Package
+		$dig = ResolvePackageDigest $_
+		foreach ($e in ((GetPackageDefinition $Dig).env).GetEnumerator()) {
+			[string[]]$envs["$pkg[$($e.Name.ToUpper())]"] += ,$e.Value -split ';' | ForEach-Object { $_.Replace("$(GetPwrContentPath)\$($dig.Substring(7, 12))", "$(GetAirpowerPath)\ref\$pkg") }
+		}
+		WriteHost "Package: $pkg@$dig"
+	}
+	$len = $ev.Length
+	foreach ($e in $envs.GetEnumerator()) {
+		$name = ($e.Name -split '[[\]]')[1]
+		$ev = [Environment]::GetEnvironmentVariable($name, $Target) -split ';' | Where-Object { $_ -and $_.Trim() }
+		switch ($AddOrRemove) {
+			'add' {
+				$ev += $e.Value | Where-Object { $_ -notin $ev }
+			}
+			'remove' {
+				$ev = $ev | Where-Object { $_ -notin $e.Value }
+			}
+		}
+		if ($ev.Length -ne $len) {
+			$newenv = $ev -join ';'
+			[Environment]::SetEnvironmentVariable($name, $newenv, $Target)
+			Set-Item "Env:\$($name)" -Value $newenv
+		}
+	}
+	WriteHost "$(if ($AddOrRemove -eq 'add') { 'Added' } else { 'Removed' }): $(($envs.GetEnumerator() | ForEach-Object { $_.Name }) -join ', ')"
+}
+
 function Invoke-AirpowerPrune {
 	[CmdletBinding()]
 	param ()
@@ -273,6 +317,7 @@ Commands:
   exec           Runs a user-defined scriptblock in a managed PowerShell session
   run            Runs a user-defined scriptblock provided in a project file
   update         Updates all tagged packages
+  path           Modifies packages on the path environment variable
   prune          Deletes unreferenced packages
   remove         Untags and deletes packages
   save           Downloads packages for use in an offline installation
