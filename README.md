@@ -53,6 +53,7 @@ Command | Description
 [`exec`](./doc/airpower-exec.md) | Runs a user-defined scriptblock in a managed PowerShell session
 [`run`](./doc/airpower-run.md) | Runs a user-defined scriptblock provided in a project file
 [`update`](./doc/airpower-update.md) | Updates all tagged packages
+[`path`](./doc/airpower-path.md) | Modifies packages on the path environment variable
 [`prune`](./doc/airpower-prune.md) | Deletes unreferenced packages
 [`remove`](./doc/airpower-remove.md) | Untags and deletes packages
 [`save`](./doc/airpower-save.md) | Downloads packages for use in an offline installation
